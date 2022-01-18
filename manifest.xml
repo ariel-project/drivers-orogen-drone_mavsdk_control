@@ -1,0 +1,11 @@
+<package>
+  <description brief="Orogen component for drone control using MAVSDK">
+  
+  </description>
+  <author>Jhonas Prado Moura/jhonas.moura@tidewise.io</author>
+  <license>Proprietary</license>
+  
+  <depend package="base/cmake" />
+  <depend package="base/types"/>
+  <depend package="drivers/mavsdk"/>
+</package>

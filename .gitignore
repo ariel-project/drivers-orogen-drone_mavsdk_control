@@ -1,0 +1,9 @@
+templates/*
+.orogen/*
+*~
+.*.swp
+build/*
+.vscode/c_cpp*
+
+*autobuild-stamp
+
