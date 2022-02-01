@@ -3,7 +3,14 @@
 #ifndef DRONE_MAVSDK_CONTROL_MAVDRONECONTROL_TASK_HPP
 #define DRONE_MAVSDK_CONTROL_MAVDRONECONTROL_TASK_HPP
 
+#include "base-logging/Logging.hpp"
+#include "drone_dji_sdk/drone_dji_sdkTypes.hpp"
 #include "drone_mavsdk_control/MavDroneControlTaskBase.hpp"
+#include "mavsdk/mavsdk.h"
+#include "mavsdk/plugins/action/action.h"
+#include "mavsdk/plugins/info/info.h"
+#include "mavsdk/plugins/mission/mission.h"
+#include "mavsdk/plugins/telemetry/telemetry.h"
 
 namespace drone_mavsdk_control
 {
@@ -104,6 +111,29 @@ argument.
          * before calling start() again.
          */
         void cleanupHook();
+
+      private:
+        typedef MavDroneControlTask::States TaskState;
+        // Useful data for computing state transition
+        struct StateFeedback
+        {
+            bool is_healthy;
+            double current_altitude;
+            bool current_mission_finished;
+            bool landing_finished;
+            bool disarm_finished;
+        };
+
+        StateFeedback mStateFeedback;
+        mavsdk::Mavsdk mMavSdk;
+        std::shared_ptr<mavsdk::System> mSystem;
+        double mTakeoffAltitude;
+
+        bool readyToTakeOff(mavsdk::Telemetry const& telemetry);
+
+        TaskState runtimeStateTransition(TaskState const& current_state,
+                                         drone_dji_sdk::CommandAction const& command,
+                                         StateFeedback const& state_feedback);
     };
 } // namespace drone_mavsdk_control
 

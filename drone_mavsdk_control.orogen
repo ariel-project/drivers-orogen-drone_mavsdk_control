@@ -5,13 +5,14 @@ name "drone_mavsdk_control"
 # If new data types need to be defined, they have to be put in a separate C++
 # header, and this header will be loaded here
 import_types_from "drone_mavsdk_controlTypes.hpp"
+import_types_from "drone_dji_sdk"
 # Finally, it is pretty common that headers are directly loaded from an external
 # library. In this case, the library must be first used (the name is the
 # library's pkg-config name) and then the header can be used. Following Rock
 # conventions, a common use-case would be:
 #
-# using_library "mavsdk"
-# import_types_from "mavsdk/CustomType.hpp"
+using_library "mavsdk"
+# import_types_from "mavsdk/mavsdk.h"
 
 # If this project uses data types that are defined in other oroGen projects,
 # these projects should be imported there as well.
@@ -27,17 +28,17 @@ task_context "MavDroneControlTask" do
     # transition to a setup where all components use a configuration step.
     needs_configuration
 
-    # A configuration property (here, a std::string). Its value can be retrieved
-    # in the C++ code with # _config_value.get() and _config_value.set(new_value).
-    property "config_value", "/std/string"
+    # Serial port that the drone is connected
+    property "serial_port", "/std/string"
 
-    # An input port, i.e. an object from which the component gets data from
-    # other components' outputs
-    #
-    # Data can be retrieved using _input.read(value), which returns true if data
-    # was available, and false otherwise. _input.connected() returns if this
-    # input is connected to an output or not.
-    input_port "input", "/std/string"
+    # Baudrate
+    property "baudrate", "uint32_t", 230_400
+
+    # Takeoff expected altitude
+    property "takeoff_altitude", "double", 1.2
+
+    # Command sent to the drone
+    input_port "cmd_input", "drone_dji_sdk/CommandAction"
 
     # An output port, i.e. an object to which the component pushes data so that
     # it is transmitted to other components' inputs
@@ -45,6 +46,10 @@ task_context "MavDroneControlTask" do
     # Data can be written using _output.write(value). _output.connected() returns
     # if this output is connected to an input or not.
     output_port "output", "int"
+
+    runtime_states :NOT_READY, :READY_TO_TAKE_OFF, :TAKING_OFF,
+                   :IN_THE_AIR, :ON_MISSION, :PREPARE_LANDING,
+                   :LANDING, :DISARMED
 
     # If you want that component's updateHook() to be executed when the "input"
     # port gets data, uncomment this and comment the 'periodic' line
