@@ -8,9 +8,10 @@
 #include "drone_mavsdk_control/MavDroneControlTaskBase.hpp"
 #include "mavsdk/mavsdk.h"
 #include "mavsdk/plugins/action/action.h"
-#include "mavsdk/plugins/info/info.h"
 #include "mavsdk/plugins/mission/mission.h"
 #include "mavsdk/plugins/telemetry/telemetry.h"
+#include <gps_base/BaseTypes.hpp>
+#include <gps_base/UTMConverter.hpp>
 
 namespace drone_mavsdk_control
 {
@@ -121,19 +122,26 @@ argument.
             double current_altitude;
             bool current_mission_finished;
             bool landing_finished;
-            bool disarm_finished;
         };
 
         StateFeedback mStateFeedback;
         mavsdk::Mavsdk mMavSdk;
         std::shared_ptr<mavsdk::System> mSystem;
-        double mTakeoffAltitude;
+        TaskState mCurrentState;
+        gps_base::UTMConverter mUtmConverter;
 
-        bool readyToTakeOff(mavsdk::Telemetry const& telemetry);
+        void healthCheck(mavsdk::Telemetry const& telemetry);
 
-        TaskState runtimeStateTransition(TaskState const& current_state,
-                                         drone_dji_sdk::CommandAction const& command,
-                                         StateFeedback const& state_feedback);
+        void issueTakeoffCommand();
+
+        void goToCommand();
+
+        void landingCommand();
+
+        void missionCommand();
+
+        mavsdk::Mission::MissionPlan
+        djiMission2MavMissionPlan(drone_dji_sdk::Mission const& mission);
     };
 } // namespace drone_mavsdk_control
 
