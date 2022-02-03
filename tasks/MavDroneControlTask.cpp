@@ -91,9 +91,6 @@ void MavDroneControlTask::updateHook()
     {
     case dji::CommandAction::TAKEOFF_ACTIVATE:
         issueTakeoffCommand();
-    case dji::CommandAction::PRE_LANDING_ACTIVATE:
-        // Issue a go to command to hover near Tupan
-        goToCommand();
     case dji::CommandAction::LANDING_ACTIVATE:
         landingCommand();
     case dji::CommandAction::GO_TO_ACTIVATE:
