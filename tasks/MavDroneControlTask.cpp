@@ -19,6 +19,22 @@ MavDroneControlTask::~MavDroneControlTask() {}
 // hooks defined by Orocos::RTT. See MavDroneControlTask.hpp for more detailed
 // documentation about them.
 
+typedef MavDroneControlTask::States TaskState;
+static TaskState flightStatusToTaskState(Telemetry::LandedState status)
+{
+    switch (status)
+    {
+    case Telemetry::LandedState::Landing:
+    case Telemetry::LandedState::TakingOff:
+    case Telemetry::LandedState::InAir:
+        return TaskState::IN_THE_AIR;
+    default:
+        return TaskState::ON_THE_GROUND;
+    }
+    // Never reached
+    throw std::invalid_argument("invalid controller state");
+}
+
 bool MavDroneControlTask::configureHook()
 {
     if (!MavDroneControlTaskBase::configureHook())
@@ -57,6 +73,13 @@ bool MavDroneControlTask::startHook()
 }
 void MavDroneControlTask::updateHook()
 {
+    _pose_samples.write(poseFeedback());
+    _battery.write(batteryFeedback());
+
+    auto telemetry = Telemetry(mSystem);
+    TaskState status = flightStatusToTaskState(telemetry.landed_state());
+    if (state() != status)
+        state(status);
 
     dji::CommandAction cmd;
     if (_cmd_input.read(cmd) == RTT::NoData)
@@ -81,8 +104,6 @@ void MavDroneControlTask::updateHook()
         break;
     }
 
-    _pose_samples.write(poseFeedback());
-    _battery.write(batteryFeedback());
     MavDroneControlTaskBase::updateHook();
 }
 void MavDroneControlTask::errorHook() { MavDroneControlTaskBase::errorHook(); }
@@ -218,9 +239,10 @@ samples::RigidBodyState MavDroneControlTask::poseFeedback()
     pose.velocity.x() = mav_vel.north_m_s;
     pose.velocity.y() = -mav_vel.east_m_s;
     pose.velocity.z() = -mav_vel.down_m_s;
-    
-    Telemetry::AngularVelocityBody mav_ang_vel = telemetry.attitude_angular_velocity_body();
-    pose.angular_velocity.x()   = mav_ang_vel.roll_rad_s;
+
+    Telemetry::AngularVelocityBody mav_ang_vel =
+        telemetry.attitude_angular_velocity_body();
+    pose.angular_velocity.x() = mav_ang_vel.roll_rad_s;
     pose.angular_velocity.y() = -mav_ang_vel.pitch_rad_s;
     pose.angular_velocity.z() = -mav_ang_vel.yaw_rad_s;
 
