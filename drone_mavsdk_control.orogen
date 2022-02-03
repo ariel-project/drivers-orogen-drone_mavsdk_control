@@ -6,6 +6,7 @@ import_types_from "std"
 import_types_from "drone_mavsdk_controlTypes.hpp"
 import_types_from "drone_dji_sdk"
 import_types_from "gps_base"
+import_types_from "power_base"
 import_types_from "base"
 
 # Declare a new task context (i.e., a component)
@@ -35,13 +36,8 @@ task_context "MavDroneControlTask" do
 
     input_port "cmd_mission", "drone_dji_sdk/Mission"
 
-    
-    # An output port, i.e. an object to which the component pushes data so that
-    # it is transmitted to other components' inputs
-    #
-    # Data can be written using _output.write(value). _output.connected() returns
-    # if this output is connected to an input or not.
-    output_port "output", "int"
+    output_port "pose_samples", "base/samples/RigidBodyState"
+    output_port "battery", "power_base/BatteryStatus"
 
     runtime_states :ON_THE_GROUND, :IN_THE_AIR
 

@@ -142,6 +142,10 @@ argument.
 
         mavsdk::Mission::MissionPlan
         djiMission2MavMissionPlan(drone_dji_sdk::Mission const& mission);
+
+        power_base::BatteryStatus batteryFeedback();
+
+        base::samples::RigidBodyState poseFeedback();
     };
 } // namespace drone_mavsdk_control
 

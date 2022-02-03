@@ -11,5 +11,6 @@
   <depend package="drivers/mavsdk"/>
   <depend package="drivers/gps_base"/>
   <depend package="drivers/orogen/gps_base"/>
+  <depend package="drivers/orogen/power_base"/>
   <depend package="drivers/orogen/drone_dji_sdk"/>
 </package>

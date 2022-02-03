@@ -4,6 +4,8 @@ using namespace drone_mavsdk_control;
 using namespace std;
 using namespace mavsdk;
 using namespace base;
+using namespace power_base;
+using namespace gps_base;
 namespace dji = drone_dji_sdk;
 
 MavDroneControlTask::MavDroneControlTask(std::string const& name)
@@ -55,7 +57,6 @@ bool MavDroneControlTask::startHook()
 }
 void MavDroneControlTask::updateHook()
 {
-    auto telemetry = Telemetry(mSystem);
 
     dji::CommandAction cmd;
     if (_cmd_input.read(cmd) == RTT::NoData)
@@ -80,6 +81,8 @@ void MavDroneControlTask::updateHook()
         break;
     }
 
+    _pose_samples.write(poseFeedback());
+    _battery.write(batteryFeedback());
     MavDroneControlTaskBase::updateHook();
 }
 void MavDroneControlTask::errorHook() { MavDroneControlTaskBase::errorHook(); }
@@ -139,14 +142,15 @@ void MavDroneControlTask::goToCommand()
     samples::RigidBodyState setpoint_rbs;
     setpoint_rbs.position = setpoint.position;
 
-    gps_base::Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
+    Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
     auto noop = [](Action::Result result) {};
     Action action = Action(mSystem);
     action.goto_location_async(gps_setpoint.latitude, gps_setpoint.longitude,
                                gps_setpoint.altitude, -setpoint.heading.getDeg(), noop);
 }
 
-void MavDroneControlTask::landingCommand() {
+void MavDroneControlTask::landingCommand()
+{
     auto noop = [](Action::Result result) {};
     Action action = Action(mSystem);
     action.land_async(noop);
@@ -174,14 +178,58 @@ MavDroneControlTask::djiMission2MavMissionPlan(drone_dji_sdk::Mission const& mis
         samples::RigidBodyState position_rbs;
         position_rbs.position = waypoint.position;
 
-        gps_base::Solution gps_position = mUtmConverter.convertNWUToGPS(position_rbs);
+        Solution gps_position = mUtmConverter.convertNWUToGPS(position_rbs);
         mission_item.latitude_deg = gps_position.latitude;
         mission_item.longitude_deg = gps_position.longitude;
         mission_item.relative_altitude_m = gps_position.altitude;
         mission_item.speed_m_s = mission.max_velocity;
         mission_item.gimbal_pitch_deg = waypoint.gimbal_pitch.getDeg();
         mission_item.is_fly_through = true;
+        mission_item.yaw_deg = -waypoint.yaw.getDeg();
         plan.mission_items.push_back(mission_item);
     }
     return plan;
+}
+
+BatteryStatus MavDroneControlTask::batteryFeedback()
+{
+    auto telemetry = Telemetry(mSystem);
+    // Get battery info. This method returns information about 1 battery.
+    // I am not sure if this would be an issue with DJI drones (they sent info
+    // about the battery as a whole, no matter no number of batteries it has).
+    Telemetry::Battery battery = telemetry.battery();
+    BatteryStatus status;
+    status.voltage = battery.voltage_v;
+    status.charge = battery.remaining_percent;
+    return status;
+}
+
+samples::RigidBodyState MavDroneControlTask::poseFeedback()
+{
+    auto telemetry = Telemetry(mSystem);
+    Telemetry::Position mav_position = telemetry.position();
+    Solution gps_position;
+    gps_position.latitude = mav_position.latitude_deg;
+    gps_position.longitude = mav_position.longitude_deg;
+    gps_position.altitude = mav_position.absolute_altitude_m;
+
+    samples::RigidBodyState pose = mUtmConverter.convertToNWU(gps_position);
+    Telemetry::VelocityNed mav_vel = telemetry.velocity_ned();
+    pose.velocity.x() = mav_vel.north_m_s;
+    pose.velocity.y() = -mav_vel.east_m_s;
+    pose.velocity.z() = -mav_vel.down_m_s;
+    
+    Telemetry::AngularVelocityBody mav_ang_vel = telemetry.attitude_angular_velocity_body();
+    pose.angular_velocity.x()   = mav_ang_vel.roll_rad_s;
+    pose.angular_velocity.y() = -mav_ang_vel.pitch_rad_s;
+    pose.angular_velocity.z() = -mav_ang_vel.yaw_rad_s;
+
+    Telemetry::Quaternion mav_orientation = telemetry.attitude_quaternion();
+    pose.orientation.x() = mav_orientation.x;
+    pose.orientation.y() = -mav_orientation.y;
+    pose.orientation.z() = -mav_orientation.z;
+    pose.orientation.w() = mav_orientation.w;
+
+    pose.time = base::Time::now();
+    return pose;
 }
