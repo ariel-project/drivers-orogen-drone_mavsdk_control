@@ -40,14 +40,6 @@ bool MavDroneControlTask::configureHook()
     if (!MavDroneControlTaskBase::configureHook())
         return false;
 
-    mUtmConverter.setParameters(_utm_parameters.get());
-    return true;
-}
-bool MavDroneControlTask::startHook()
-{
-    if (!MavDroneControlTaskBase::startHook())
-        return false;
-
     string connection_str =
         "serial://" + _serial_port.get() + ":" + to_string(_baudrate.get());
     ConnectionResult connection_result = mMavSdk.add_any_connection(connection_str);
@@ -60,15 +52,17 @@ bool MavDroneControlTask::startHook()
     mSystem = mMavSdk.systems().front();
     auto telemetry = Telemetry(mSystem);
     healthCheck(telemetry);
-
     auto action = Action(mSystem);
-    Action::Result action_result = action.arm();
-    if (action_result != Action::Result::Success)
-    {
-        LOG_ERROR("Could not arm device.")
-        return false;
-    }
     action.set_takeoff_altitude(_takeoff_altitude.get());
+
+    mUtmConverter.setParameters(_utm_parameters.get());
+    return true;
+}
+bool MavDroneControlTask::startHook()
+{
+    if (!MavDroneControlTaskBase::startHook())
+        return false;
+
     return true;
 }
 void MavDroneControlTask::updateHook()
@@ -148,6 +142,7 @@ void MavDroneControlTask::issueTakeoffCommand()
 
     auto noop = [](Action::Result result) {};
     Action action = Action(mSystem);
+    action.arm();
     action.takeoff_async(noop);
 }
 
