@@ -1,6 +1,7 @@
 #ifndef drone_mavsdk_control_TYPES_HPP
 #define drone_mavsdk_control_TYPES_HPP
 
+#include "base/Time.hpp"
 /* If you need to define types specific to your oroGen components, define them
  * here. Required headers must be included explicitly
  *
@@ -41,6 +42,19 @@ namespace drone_mavsdk_control
         Goto,
         MissionUpload,
         MissionStart
+    };
+
+    struct CommandFeedback
+    {
+        base::Time time;
+        DroneCommand command;
+        CommandResult result;
+    };
+
+    struct HealthStatus
+    {
+        base::Time time;
+        uint8_t status = 0;
     };
 } // namespace drone_mavsdk_control
 

@@ -127,14 +127,14 @@ argument.
             UNCALIBRATED_GYROMETER = 0x40
         };
         /** @meta bitfield /drone_mavsdk_control/UnitHealth*/
-        uint8_t mUnitHealth = 0;
-
+        HealthStatus mUnitHealth;
 
         std::shared_ptr<mavsdk::System> mSystem;
         gps_base::UTMConverter mUtmConverter;
-        DroneCommand mIssuedCmd;
+        double mTakeoffAltitude;
+        double mTakeoffFinishedThreshold;
 
-        uint8_t healthCheck(mavsdk::Telemetry const& telemetry);
+        HealthStatus healthCheck(mavsdk::Telemetry const& telemetry);
 
         mavsdk::Action::Result takeoffCommand(mavsdk::Telemetry const& telemetry);
 

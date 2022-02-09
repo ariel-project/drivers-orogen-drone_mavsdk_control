@@ -72,7 +72,7 @@ bool MavDroneControlTask::configureHook()
     if (!MavDroneControlTaskBase::configureHook())
         return false;
     Mavsdk mav_handler;
-    mav_handler.set_timeout_s(_timeout.get());
+    mav_handler.set_timeout_s(_timeout.get().toSeconds());
 
     ConnectionResult connection_result = mav_handler.add_any_connection(_address.get());
     if (connection_result != ConnectionResult::Success)
@@ -80,6 +80,9 @@ bool MavDroneControlTask::configureHook()
         LOG_ERROR("Unable to connect to device.")
         return false;
     }
+
+    mTakeoffAltitude = _takeoff_altitude.get();
+    mTakeoffFinishedThreshold = _takeoff_finished_threshold.get();
 
     mSystem = mav_handler.systems().front();
     auto action = Action(mSystem);
@@ -145,25 +148,26 @@ void MavDroneControlTask::errorHook() { MavDroneControlTaskBase::errorHook(); }
 void MavDroneControlTask::stopHook() { MavDroneControlTaskBase::stopHook(); }
 void MavDroneControlTask::cleanupHook() { MavDroneControlTaskBase::cleanupHook(); }
 
-uint8_t MavDroneControlTask::healthCheck(Telemetry const& telemetry)
+HealthStatus MavDroneControlTask::healthCheck(Telemetry const& telemetry)
 {
     Telemetry::Health device_health = telemetry.health();
 
     if (!device_health.is_armable)
-        mUnitHealth |= UnitHealth::NOT_ARMABLE;
+        mUnitHealth.status |= UnitHealth::NOT_ARMABLE;
     if (!device_health.is_home_position_ok)
-        mUnitHealth |= UnitHealth::HOME_POSITION_NOT_SET;
+        mUnitHealth.status |= UnitHealth::HOME_POSITION_NOT_SET;
     if (!device_health.is_global_position_ok)
-        mUnitHealth |= UnitHealth::BAD_GLOBAL_POSITION_ESTIMATE;
+        mUnitHealth.status |= UnitHealth::BAD_GLOBAL_POSITION_ESTIMATE;
     if (!device_health.is_local_position_ok)
-        mUnitHealth |= UnitHealth::BAD_LOCAL_POSITION_ESTIMATE;
+        mUnitHealth.status |= UnitHealth::BAD_LOCAL_POSITION_ESTIMATE;
     if (!device_health.is_magnetometer_calibration_ok)
-        mUnitHealth |= UnitHealth::UNCALIBRATED_MAGNETOMETER;
+        mUnitHealth.status |= UnitHealth::UNCALIBRATED_MAGNETOMETER;
     if (!device_health.is_accelerometer_calibration_ok)
-        mUnitHealth |= UnitHealth::UNCALIBRATED_ACCELEROMETER;
+        mUnitHealth.status |= UnitHealth::UNCALIBRATED_ACCELEROMETER;
     if (!device_health.is_gyrometer_calibration_ok)
-        mUnitHealth |= UnitHealth::UNCALIBRATED_GYROMETER;
+        mUnitHealth.status |= UnitHealth::UNCALIBRATED_GYROMETER;
 
+    mUnitHealth.time = base::Time::now();
     return mUnitHealth;
 }
 
@@ -193,7 +197,7 @@ Action::Result MavDroneControlTask::takeoffCommand(Telemetry const& telemetry)
     else
     {
         float current_altitude = telemetry.position().relative_altitude_m;
-        if (abs(current_altitude - _takeoff_altitude.get()) < 1e-2)
+        if (abs(current_altitude - mTakeoffAltitude) < mTakeoffFinishedThreshold)
         {
             samples::RigidBodyState setpoint_rbs;
             setpoint_rbs.position = setpoint.position;
