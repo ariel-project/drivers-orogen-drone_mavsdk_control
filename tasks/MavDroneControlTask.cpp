@@ -137,6 +137,7 @@ void MavDroneControlTask::updateHook()
             break;
         }
     }
+    _command.write(mIssuedCmd);
 
     MavDroneControlTaskBase::updateHook();
 }
@@ -179,9 +180,15 @@ Action::Result MavDroneControlTask::takeoffCommand(Telemetry const& telemetry)
     {
         auto drone_arm_result = action.arm();
         if (drone_arm_result == Action::Result::Success)
+        {
+            mIssuedCmd = DroneCommand::Takeoff;
             return action.takeoff();
+        }
         else
+        {
+            mIssuedCmd = DroneCommand::Arm;
             return drone_arm_result;
+        }
     }
     else
     {
@@ -192,6 +199,7 @@ Action::Result MavDroneControlTask::takeoffCommand(Telemetry const& telemetry)
             setpoint_rbs.position = setpoint.position;
 
             Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
+            mIssuedCmd = DroneCommand::Goto;
             return action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
                                         gps_setpoint.altitude,
                                         -setpoint.heading.getDeg());
@@ -211,6 +219,7 @@ Action::Result MavDroneControlTask::goToCommand()
 
     Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
     Action action = Action(mSystem);
+    mIssuedCmd = DroneCommand::Goto;
     return action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
                                 gps_setpoint.altitude, -setpoint.heading.getDeg());
 }
@@ -219,9 +228,15 @@ Action::Result MavDroneControlTask::landingCommand(Telemetry const& telemetry)
 {
     Action action = Action(mSystem);
     if (telemetry.landed_state() != Telemetry::LandedState::OnGround)
+    {
+        mIssuedCmd = DroneCommand::Land;
         return action.land();
+    }
     else
+    {
+        mIssuedCmd = DroneCommand::Disarm;
         return action.disarm();
+    }
 }
 
 Mission::Result MavDroneControlTask::missionCommand()
@@ -234,9 +249,15 @@ Mission::Result MavDroneControlTask::missionCommand()
     Mission::MissionPlan mission_plan = convert2MavMissionPlan(mission);
     auto upload_result = mav_mission.upload_mission(mission_plan);
     if (upload_result == Mission::Result::Success)
+    {
+        mIssuedCmd = DroneCommand::MissionStart;
         return mav_mission.start_mission();
+    }
     else
+    {
+        mIssuedCmd = DroneCommand::MissionUpload;
         return upload_result;
+    }
 }
 
 Mission::MissionPlan

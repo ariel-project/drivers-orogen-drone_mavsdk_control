@@ -115,6 +115,8 @@ argument.
         void cleanupHook();
 
       private:
+        typedef MavDroneControlTask::States TaskState;
+
         enum UnitHealth
         {
             NOT_ARMABLE = 0x01, HOME_POSITION_NOT_SET = 0x02,
@@ -124,14 +126,13 @@ argument.
             UNCALIBRATED_ACCELEROMETER = 0x20,
             UNCALIBRATED_GYROMETER = 0x40
         };
-
         /** @meta bitfield /drone_mavsdk_control/UnitHealth*/
         uint8_t mUnitHealth = 0;
 
-        typedef MavDroneControlTask::States TaskState;
 
         std::shared_ptr<mavsdk::System> mSystem;
         gps_base::UTMConverter mUtmConverter;
+        DroneCommand mIssuedCmd;
 
         uint8_t healthCheck(mavsdk::Telemetry const& telemetry);
 

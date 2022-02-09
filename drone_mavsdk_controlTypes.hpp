@@ -8,8 +8,10 @@
  * which case you do not need this file
  */
 
-namespace drone_mavsdk_control {
-    enum CommandResult{
+namespace drone_mavsdk_control
+{
+    enum CommandResult
+    {
         Unknown,
         Success,
         NoSystem,
@@ -29,7 +31,17 @@ namespace drone_mavsdk_control {
         MissionTransferCancelled,
         MissionNext
     };
-}
+
+    enum DroneCommand
+    {
+        Arm,
+        Disarm,
+        Takeoff,
+        Land,
+        Goto,
+        MissionUpload,
+        MissionStart
+    };
+} // namespace drone_mavsdk_control
 
 #endif
-
