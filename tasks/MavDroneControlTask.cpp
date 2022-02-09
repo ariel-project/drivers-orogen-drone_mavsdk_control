@@ -24,12 +24,12 @@ static TaskState flightStatusToTaskState(Telemetry::LandedState status)
 {
     switch (status)
     {
-    case Telemetry::LandedState::Landing:
-    case Telemetry::LandedState::TakingOff:
-    case Telemetry::LandedState::InAir:
-        return TaskState::IN_THE_AIR;
-    default:
-        return TaskState::ON_THE_GROUND;
+        case Telemetry::LandedState::Landing:
+        case Telemetry::LandedState::TakingOff:
+        case Telemetry::LandedState::InAir:
+            return TaskState::IN_THE_AIR;
+        default:
+            return TaskState::ON_THE_GROUND;
     }
     // Never reached
     throw std::invalid_argument("invalid controller state");
@@ -65,19 +65,18 @@ bool MavDroneControlTask::startHook()
 }
 void MavDroneControlTask::updateHook()
 {
-    _pose_samples.write(poseFeedback());
-    _battery.write(batteryFeedback());
-
     auto telemetry = Telemetry(mSystem);
+    _unit_health.write(healthCheck(telemetry));
+    _pose_samples.write(poseFeedback(telemetry));
+    _battery.write(batteryFeedback(telemetry));
+
     TaskState status = flightStatusToTaskState(telemetry.landed_state());
     if (state() != status)
         state(status);
 
     dji::CommandAction cmd;
     if (_cmd_input.read(cmd) == RTT::NoData)
-    {
         return;
-    }
 
     switch (cmd)
     {
@@ -99,35 +98,26 @@ void MavDroneControlTask::errorHook() { MavDroneControlTaskBase::errorHook(); }
 void MavDroneControlTask::stopHook() { MavDroneControlTaskBase::stopHook(); }
 void MavDroneControlTask::cleanupHook() { MavDroneControlTaskBase::cleanupHook(); }
 
-void MavDroneControlTask::healthCheck(Telemetry const& telemetry)
+uint8_t MavDroneControlTask::healthCheck(Telemetry const& telemetry)
 {
     Telemetry::Health device_health = telemetry.health();
-    if (!device_health.is_gyrometer_calibration_ok)
-    {
-        LOG_ERROR("Gyro needs calibration!");
-    }
-    if (!device_health.is_accelerometer_calibration_ok)
-    {
-        LOG_ERROR("Accelerometer needs calibration!");
-    }
-    if (!device_health.is_magnetometer_calibration_ok)
-    {
-        LOG_ERROR("Compass needs calibration!");
-    }
-    if (!device_health.is_local_position_ok)
-    {
-        LOG_ERROR("Local position estimation is not good enough to fly in 'position "
-                  "control' mode");
-    }
-    if (!device_health.is_global_position_ok)
-    {
-        LOG_ERROR("Global position estimation is not good enough to fly in 'position "
-                  "control' mode");
-    }
+
     if (!device_health.is_armable)
-    {
-        LOG_ERROR("System is not armable!");
-    }
+        mUnitHealth |= UnitHealth::NOT_ARMABLE;
+    if (!device_health.is_home_position_ok)
+        mUnitHealth |= UnitHealth::HOME_POSITION_NOT_SET;
+    if (!device_health.is_global_position_ok)
+        mUnitHealth |= UnitHealth::BAD_GLOBAL_POSITION_ESTIMATE;
+    if (!device_health.is_local_position_ok)
+        mUnitHealth |= UnitHealth::BAD_LOCAL_POSITION_ESTIMATE;
+    if (!device_health.is_magnetometer_calibration_ok)
+        mUnitHealth |= UnitHealth::UNCALIBRATED_MAGNETOMETER;
+    if (!device_health.is_accelerometer_calibration_ok)
+        mUnitHealth |= UnitHealth::UNCALIBRATED_ACCELEROMETER;
+    if (!device_health.is_gyrometer_calibration_ok)
+        mUnitHealth |= UnitHealth::UNCALIBRATED_GYROMETER;
+
+    return mUnitHealth;
 }
 
 void MavDroneControlTask::issueTakeoffCommand()
@@ -202,9 +192,8 @@ MavDroneControlTask::djiMission2MavMissionPlan(drone_dji_sdk::Mission const& mis
     return plan;
 }
 
-BatteryStatus MavDroneControlTask::batteryFeedback()
+BatteryStatus MavDroneControlTask::batteryFeedback(Telemetry const& telemetry)
 {
-    auto telemetry = Telemetry(mSystem);
     // Get battery info. This method returns information about 1 battery.
     // I am not sure if this would be an issue with DJI drones (they sent info
     // about the battery as a whole, no matter no number of batteries it has).
@@ -215,9 +204,8 @@ BatteryStatus MavDroneControlTask::batteryFeedback()
     return status;
 }
 
-samples::RigidBodyState MavDroneControlTask::poseFeedback()
+samples::RigidBodyState MavDroneControlTask::poseFeedback(Telemetry const& telemetry)
 {
-    auto telemetry = Telemetry(mSystem);
     Telemetry::Position mav_position = telemetry.position();
     Solution gps_position;
     gps_position.latitude = mav_position.latitude_deg;

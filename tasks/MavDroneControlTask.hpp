@@ -6,6 +6,7 @@
 #include "base-logging/Logging.hpp"
 #include "drone_dji_sdk/drone_dji_sdkTypes.hpp"
 #include "drone_mavsdk_control/MavDroneControlTaskBase.hpp"
+#include "drone_mavsdk_controlTypes.hpp"
 #include "mavsdk/mavsdk.h"
 #include "mavsdk/plugins/action/action.h"
 #include "mavsdk/plugins/mission/mission.h"
@@ -114,12 +115,25 @@ argument.
         void cleanupHook();
 
       private:
+        enum UnitHealth
+        {
+            NOT_ARMABLE = 0x01, HOME_POSITION_NOT_SET = 0x02,
+            BAD_GLOBAL_POSITION_ESTIMATE = 0x04,
+            BAD_LOCAL_POSITION_ESTIMATE = 0x08,
+            UNCALIBRATED_MAGNETOMETER = 0x10,
+            UNCALIBRATED_ACCELEROMETER = 0x20,
+            UNCALIBRATED_GYROMETER = 0x40
+        };
+
+        /** @meta bitfield /drone_mavsdk_control/UnitHealth*/
+        uint8_t mUnitHealth = 0;
+
         typedef MavDroneControlTask::States TaskState;
 
         std::shared_ptr<mavsdk::System> mSystem;
         gps_base::UTMConverter mUtmConverter;
 
-        void healthCheck(mavsdk::Telemetry const& telemetry);
+        uint8_t healthCheck(mavsdk::Telemetry const& telemetry);
 
         void issueTakeoffCommand();
 
@@ -132,9 +146,9 @@ argument.
         mavsdk::Mission::MissionPlan
         djiMission2MavMissionPlan(drone_dji_sdk::Mission const& mission);
 
-        power_base::BatteryStatus batteryFeedback();
+        power_base::BatteryStatus batteryFeedback(mavsdk::Telemetry const& telemetry);
 
-        base::samples::RigidBodyState poseFeedback();
+        base::samples::RigidBodyState poseFeedback(mavsdk::Telemetry const& telemetry);
     };
 } // namespace drone_mavsdk_control
 
