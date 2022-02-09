@@ -37,33 +37,41 @@ static TaskState flightStatusToTaskState(Telemetry::LandedState status)
 
 static CommandResult convertToCommandResult(Action::Result result)
 {
-    return (CommandResult)result;
+    switch (result)
+    {
+        case Action::Result::Unknown:
+            return CommandResult::Unknown;
+        case Action::Result::Success:
+            return CommandResult::Success;
+        case Action::Result::Busy:
+            return CommandResult::Busy;
+        case Action::Result::CommandDenied:
+            return CommandResult::CommandDenied;
+        case Action::Result::CommandDeniedLandedStateUnknown:
+            return CommandResult::CommandDeniedLandedStateUnknown;
+        case Action::Result::CommandDeniedNotLanded:
+            return CommandResult::CommandDeniedNotLanded;
+        default:
+            throw std::invalid_argument(
+                "Invalid action result. It should probably have thrown an exception.");
+    }
 }
 
 static CommandResult convertToCommandResult(Mission::Result result)
 {
     switch (result)
     {
-        case Mission::Result::Error:
-            return CommandResult::MissionError;
-        case Mission::Result::TooManyMissionItems:
-            return CommandResult::TooManyMissionItems;
-        case Mission::Result::InvalidArgument:
-            return CommandResult::MissionInvalidArgument;
-        case Mission::Result::Unsupported:
-            return CommandResult::UnsupportedMission;
-        case Mission::Result::NoMissionAvailable:
-            return CommandResult::NoMissionAvailable;
-        case Mission::Result::UnsupportedMissionCmd:
-            return CommandResult::UnsupportedMissionCmd;
+        case Mission::Result::Unknown:
+            return CommandResult::Unknown;
+        case Mission::Result::Success:
+            return CommandResult::Success;
         case Mission::Result::TransferCancelled:
             return CommandResult::MissionTransferCancelled;
-        case Mission::Result::NoSystem:
-            return CommandResult::NoSystem;
-        case Mission::Result::Timeout:
-            return CommandResult::Timeout;
+        case Mission::Result::Busy:
+            return CommandResult::Busy;
         default:
-            return (CommandResult)result;
+            throw std::invalid_argument(
+                "Invalid mission result. It should probably have thrown an exception");
     }
 }
 
@@ -86,7 +94,7 @@ bool MavDroneControlTask::configureHook()
 
     mSystem = mav_handler.systems().front();
     auto action = Action(mSystem);
-    action.set_takeoff_altitude(_takeoff_altitude.get());
+    reportCommand(DroneCommand::Config, action.set_takeoff_altitude(mTakeoffAltitude));
 
     mUtmConverter.setParameters(_utm_parameters.get());
     return true;
@@ -117,35 +125,36 @@ void MavDroneControlTask::updateHook()
     {
         case dji::CommandAction::TAKEOFF_ACTIVATE:
         {
-            Action::Result takeoff_result = takeoffCommand(telemetry);
-            _command_result.write(convertToCommandResult(takeoff_result));
+            takeoffCommand(telemetry);
             break;
         }
         case dji::CommandAction::LANDING_ACTIVATE:
         {
-            Action::Result landing_result = landingCommand(telemetry);
-            _command_result.write(convertToCommandResult(landing_result));
+            landingCommand(telemetry);
             break;
         }
         case dji::CommandAction::GOTO_ACTIVATE:
         {
-            Action::Result goto_result = goToCommand();
-            _command_result.write(convertToCommandResult(goto_result));
+            goToCommand();
             break;
         }
         case dji::CommandAction::MISSION_ACTIVATE:
         {
-            Mission::Result mission_result = missionCommand();
-            _command_result.write(convertToCommandResult(mission_result));
+            missionCommand();
             break;
         }
     }
-    _command.write(mIssuedCmd);
 
     MavDroneControlTaskBase::updateHook();
 }
-void MavDroneControlTask::errorHook() { MavDroneControlTaskBase::errorHook(); }
-void MavDroneControlTask::stopHook() { MavDroneControlTaskBase::stopHook(); }
+void MavDroneControlTask::errorHook()
+{
+    MavDroneControlTaskBase::errorHook();
+}
+void MavDroneControlTask::stopHook()
+{
+    MavDroneControlTaskBase::stopHook();
+}
 void MavDroneControlTask::cleanupHook() { MavDroneControlTaskBase::cleanupHook(); }
 
 HealthStatus MavDroneControlTask::healthCheck(Telemetry const& telemetry)
@@ -171,27 +180,22 @@ HealthStatus MavDroneControlTask::healthCheck(Telemetry const& telemetry)
     return mUnitHealth;
 }
 
-Action::Result MavDroneControlTask::takeoffCommand(Telemetry const& telemetry)
+void MavDroneControlTask::takeoffCommand(Telemetry const& telemetry)
 {
     // Issue take off with a setpoint so the drone moves there
     // ASAP to avoid colision with the vessel.
     dji::VehicleSetpoint setpoint;
     if (_cmd_pos.read(setpoint) != RTT::NewData)
-        return Action::Result::Unknown;
+        return;
 
     Action action = Action(mSystem);
     if (telemetry.landed_state() == Telemetry::LandedState::OnGround)
     {
         auto drone_arm_result = action.arm();
+        reportCommand(DroneCommand::Arm, drone_arm_result);
         if (drone_arm_result == Action::Result::Success)
         {
-            mIssuedCmd = DroneCommand::Takeoff;
-            return action.takeoff();
-        }
-        else
-        {
-            mIssuedCmd = DroneCommand::Arm;
-            return drone_arm_result;
+            reportCommand(DroneCommand::Takeoff, action.takeoff());
         }
     }
     else
@@ -203,64 +207,129 @@ Action::Result MavDroneControlTask::takeoffCommand(Telemetry const& telemetry)
             setpoint_rbs.position = setpoint.position;
 
             Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
-            mIssuedCmd = DroneCommand::Goto;
-            return action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
-                                        gps_setpoint.altitude,
-                                        -setpoint.heading.getDeg());
+            reportCommand(
+                DroneCommand::Goto,
+                action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
+                                     gps_setpoint.altitude, -setpoint.heading.getDeg()));
         }
-        return Action::Result::Unknown;
+        reportCommand(DroneCommand::Takeoff, Action::Result::Unknown);
     }
 }
 
-Action::Result MavDroneControlTask::goToCommand()
+void MavDroneControlTask::goToCommand()
 {
     dji::VehicleSetpoint setpoint;
     if (_cmd_pos.read(setpoint) != RTT::NewData)
-        return Action::Result::Unknown;
+        return;
 
     samples::RigidBodyState setpoint_rbs;
     setpoint_rbs.position = setpoint.position;
 
     Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
     Action action = Action(mSystem);
-    mIssuedCmd = DroneCommand::Goto;
-    return action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
-                                gps_setpoint.altitude, -setpoint.heading.getDeg());
+    reportCommand(DroneCommand::Goto,
+                  action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
+                                       gps_setpoint.altitude,
+                                       -setpoint.heading.getDeg()));
 }
 
-Action::Result MavDroneControlTask::landingCommand(Telemetry const& telemetry)
+void MavDroneControlTask::landingCommand(Telemetry const& telemetry)
 {
     Action action = Action(mSystem);
     if (telemetry.landed_state() != Telemetry::LandedState::OnGround)
     {
-        mIssuedCmd = DroneCommand::Land;
-        return action.land();
+        reportCommand(DroneCommand::Land, action.land());
     }
     else
     {
-        mIssuedCmd = DroneCommand::Disarm;
-        return action.disarm();
+        reportCommand(DroneCommand::Disarm, action.disarm());
     }
 }
 
-Mission::Result MavDroneControlTask::missionCommand()
+void MavDroneControlTask::missionCommand()
 {
     dji::Mission mission;
     if (_cmd_mission.read(mission) != RTT::NewData)
-        return Mission::Result::Unknown;
+        return;
 
     Mission mav_mission = Mission(mSystem);
     Mission::MissionPlan mission_plan = convert2MavMissionPlan(mission);
     auto upload_result = mav_mission.upload_mission(mission_plan);
+    reportCommand(DroneCommand::MissionUpload, upload_result);
     if (upload_result == Mission::Result::Success)
     {
-        mIssuedCmd = DroneCommand::MissionStart;
-        return mav_mission.start_mission();
+        reportCommand(DroneCommand::MissionStart, mav_mission.start_mission());
     }
-    else
+}
+
+void MavDroneControlTask::reportCommand(DroneCommand const& command,
+                                        Action::Result const& result)
+{
+    switch (result)
     {
-        mIssuedCmd = DroneCommand::MissionUpload;
-        return upload_result;
+        case Action::Result::NoSystem:
+            throw DeviceError(
+                "Command failed: could not find any system to issue command.");
+        case Action::Result::ConnectionError:
+            throw DeviceError("Command failed: failed to connect with provided address");
+        case Action::Result::ParameterError:
+            throw CommandError("Command failed: error getting or setting parameter.");
+        case Action::Result::Timeout:
+            throw std::runtime_error("Command timed out.");
+        case Action::Result::Unknown:
+        case Action::Result::Success:
+        case Action::Result::Busy:
+        case Action::Result::CommandDenied:
+        case Action::Result::CommandDeniedLandedStateUnknown:
+        case Action::Result::CommandDeniedNotLanded:
+        {
+            CommandFeedback feedback;
+            feedback.time = base::Time::now();
+            feedback.command = command;
+            feedback.result = convertToCommandResult(result);
+            _command_feedback.write(feedback);
+            break;
+        }
+        case Action::Result::NoVtolTransitionSupport:
+        case Action::Result::VtolTransitionSupportUnknown:
+            throw std::runtime_error("Unsupported result.");
+    }
+}
+
+void MavDroneControlTask::reportCommand(DroneCommand const& command,
+                                        Mission::Result const& result)
+{
+    switch (result)
+    {
+        case Mission::Result::NoSystem:
+            throw DeviceError(
+                "Mission command failed: could not find any system to issue command.");
+        case Mission::Result::Error:
+            throw CommandError("Mission command failed: unknown error reported.");
+        case Mission::Result::Timeout:
+            throw std::runtime_error("Mission command failed: timed out");
+        case Mission::Result::InvalidArgument:
+            throw CommandError("Mission command failed: invalid argument");
+        case Mission::Result::TooManyMissionItems:
+            throw CommandError("Mission command failed: too many items");
+        case Mission::Result::UnsupportedMissionCmd:
+        case Mission::Result::Unsupported:
+            throw CommandError(
+                "Mission command failed: this mission is not supported by the device");
+        case Mission::Result::NoMissionAvailable:
+            throw CommandError("Mission command failed: no missions available.");
+        case Mission::Result::Unknown:
+        case Mission::Result::Success:
+        case Mission::Result::Busy:
+        case Mission::Result::TransferCancelled:
+        {
+            CommandFeedback feedback;
+            feedback.time = base::Time::now();
+            feedback.command = command;
+            feedback.result = convertToCommandResult(result);
+            _command_feedback.write(feedback);
+            break;
+        }
     }
 }
 
@@ -290,8 +359,8 @@ MavDroneControlTask::convert2MavMissionPlan(drone_dji_sdk::Mission const& missio
 BatteryStatus MavDroneControlTask::batteryFeedback(Telemetry const& telemetry)
 {
     // Get battery info. This method returns information about 1 battery.
-    // I am not sure if this would be an issue with DJI drones (they sent info
-    // about the battery as a whole, no matter no number of batteries it has).
+    // I am not sure if this would be an issue with DJI drones (they send info
+    // about batteries as a whole, no matter the number of batteries).
     Telemetry::Battery battery = telemetry.battery();
     BatteryStatus status;
     status.voltage = battery.voltage_v;

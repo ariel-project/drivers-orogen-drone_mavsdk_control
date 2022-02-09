@@ -11,30 +11,29 @@
 
 namespace drone_mavsdk_control
 {
+    struct CommandError : public std::runtime_error
+    {
+        CommandError(std::string const& msg) : std::runtime_error(msg) {}
+    };
+    struct DeviceError : public std::runtime_error
+    {
+        DeviceError(std::string const& msg) : std::runtime_error(msg) {}
+    };
+
     enum CommandResult
     {
         Unknown,
         Success,
-        NoSystem,
-        ConnectionError,
         Busy,
         CommandDenied,
         CommandDeniedLandedStateUnknown,
         CommandDeniedNotLanded,
-        Timeout,
-        ParameterError,
-        MissionError,
-        TooManyMissionItems,
-        MissionInvalidArgument,
-        UnsupportedMission,
-        NoMissionAvailable,
-        UnsupportedMissionCmd,
-        MissionTransferCancelled,
-        MissionNext
+        MissionTransferCancelled
     };
 
     enum DroneCommand
     {
+        Config,
         Arm,
         Disarm,
         Takeoff,

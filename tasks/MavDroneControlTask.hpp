@@ -119,7 +119,8 @@ argument.
 
         enum UnitHealth
         {
-            NOT_ARMABLE = 0x01, HOME_POSITION_NOT_SET = 0x02,
+            NOT_ARMABLE = 0x01,
+            HOME_POSITION_NOT_SET = 0x02,
             BAD_GLOBAL_POSITION_ESTIMATE = 0x04,
             BAD_LOCAL_POSITION_ESTIMATE = 0x08,
             UNCALIBRATED_MAGNETOMETER = 0x10,
@@ -136,13 +137,19 @@ argument.
 
         HealthStatus healthCheck(mavsdk::Telemetry const& telemetry);
 
-        mavsdk::Action::Result takeoffCommand(mavsdk::Telemetry const& telemetry);
+        void reportCommand(DroneCommand const& command,
+                           mavsdk::Action::Result const& result);
 
-        mavsdk::Action::Result goToCommand();
+        void reportCommand(DroneCommand const& command,
+                           mavsdk::Mission::Result const& result);
 
-        mavsdk::Action::Result landingCommand(mavsdk::Telemetry const& telemetry);
+        void takeoffCommand(mavsdk::Telemetry const& telemetry);
 
-        mavsdk::Mission::Result missionCommand();
+        void goToCommand();
+
+        void landingCommand(mavsdk::Telemetry const& telemetry);
+
+        void missionCommand();
 
         mavsdk::Mission::MissionPlan
         convert2MavMissionPlan(drone_dji_sdk::Mission const& mission);
