@@ -391,7 +391,7 @@ samples::RigidBodyState MavDroneControlTask::poseFeedback(Telemetry const& telem
     Telemetry::Quaternion mav_orientation = telemetry.attitude_quaternion();
     Quaterniond q_bodyned2ned(mav_orientation.w, mav_orientation.x, mav_orientation.y,
                               mav_orientation.z);
-    Quaterniond q_ned2nwu(0, 1, 0, 0);
+    Quaterniond q_ned2nwu = Quaterniond(AngleAxisd(M_PI, Vector3d::UnitX()));
     Quaterniond q_bodynwu2nwu = q_ned2nwu * q_bodyned2ned * q_ned2nwu.conjugate();
     pose.orientation = q_bodynwu2nwu;
 
