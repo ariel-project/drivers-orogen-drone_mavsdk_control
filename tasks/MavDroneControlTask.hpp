@@ -115,19 +115,8 @@ argument.
 
       private:
         typedef MavDroneControlTask::States TaskState;
-        // Useful data for computing state transition
-        struct StateFeedback
-        {
-            bool is_healthy;
-            double current_altitude;
-            bool current_mission_finished;
-            bool landing_finished;
-        };
 
-        StateFeedback mStateFeedback;
-        mavsdk::Mavsdk mMavSdk;
         std::shared_ptr<mavsdk::System> mSystem;
-        TaskState mCurrentState;
         gps_base::UTMConverter mUtmConverter;
 
         void healthCheck(mavsdk::Telemetry const& telemetry);

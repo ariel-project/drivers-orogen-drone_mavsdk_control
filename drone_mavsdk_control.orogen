@@ -19,7 +19,10 @@ task_context "MavDroneControlTask" do
     needs_configuration
 
     # Serial port that the drone is connected
-    property "serial_port", "/std/string"
+    property "address", "/std/string"
+
+    # Command timeout in seconds
+    property "timeout", "uint8_t"
 
     # Baudrate
     property "baudrate", "uint32_t", 230_400

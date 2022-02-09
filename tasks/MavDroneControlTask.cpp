@@ -39,19 +39,17 @@ bool MavDroneControlTask::configureHook()
 {
     if (!MavDroneControlTaskBase::configureHook())
         return false;
+    Mavsdk mav_handler;
+    mav_handler.set_timeout_s(_timeout.get());
 
-    string connection_str =
-        "serial://" + _serial_port.get() + ":" + to_string(_baudrate.get());
-    ConnectionResult connection_result = mMavSdk.add_any_connection(connection_str);
+    ConnectionResult connection_result = mav_handler.add_any_connection(_address.get());
     if (connection_result != ConnectionResult::Success)
     {
         LOG_ERROR("Unable to connect to device.")
         return false;
     }
 
-    mSystem = mMavSdk.systems().front();
-    auto telemetry = Telemetry(mSystem);
-    healthCheck(telemetry);
+    mSystem = mav_handler.systems().front();
     auto action = Action(mSystem);
     action.set_takeoff_altitude(_takeoff_altitude.get());
 
