@@ -41,6 +41,7 @@ task_context "MavDroneControlTask" do
 
     output_port "pose_samples", "base/samples/RigidBodyState"
     output_port "battery", "power_base/BatteryStatus"
+    output_port "command_result", "drone_mavsdk_control/CommandResult"
     output_port "unit_health", "uint8_t"
 
     runtime_states :ON_THE_GROUND, :IN_THE_AIR

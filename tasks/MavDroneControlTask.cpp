@@ -35,6 +35,38 @@ static TaskState flightStatusToTaskState(Telemetry::LandedState status)
     throw std::invalid_argument("invalid controller state");
 }
 
+static CommandResult convertToCommandResult(Action::Result result)
+{
+    return (CommandResult)result;
+}
+
+static CommandResult convertToCommandResult(Mission::Result result)
+{
+    switch (result)
+    {
+        case Mission::Result::Error:
+            return CommandResult::MissionError;
+        case Mission::Result::TooManyMissionItems:
+            return CommandResult::TooManyMissionItems;
+        case Mission::Result::InvalidArgument:
+            return CommandResult::MissionInvalidArgument;
+        case Mission::Result::Unsupported:
+            return CommandResult::UnsupportedMission;
+        case Mission::Result::NoMissionAvailable:
+            return CommandResult::NoMissionAvailable;
+        case Mission::Result::UnsupportedMissionCmd:
+            return CommandResult::UnsupportedMissionCmd;
+        case Mission::Result::TransferCancelled:
+            return CommandResult::MissionTransferCancelled;
+        case Mission::Result::NoSystem:
+            return CommandResult::NoSystem;
+        case Mission::Result::Timeout:
+            return CommandResult::Timeout;
+        default:
+            return (CommandResult)result;
+    }
+}
+
 bool MavDroneControlTask::configureHook()
 {
     if (!MavDroneControlTaskBase::configureHook())
@@ -80,16 +112,30 @@ void MavDroneControlTask::updateHook()
 
     switch (cmd)
     {
-    case dji::CommandAction::TAKEOFF_ACTIVATE:
-        issueTakeoffCommand();
-    case dji::CommandAction::LANDING_ACTIVATE:
-        landingCommand();
-    case dji::CommandAction::GO_TO_ACTIVATE:
-        goToCommand();
-    case dji::CommandAction::MISSION_ACTIVATE:
-        missionCommand();
-    default:
-        break;
+        case dji::CommandAction::TAKEOFF_ACTIVATE:
+        {
+            Action::Result takeoff_result = takeoffCommand(telemetry);
+            _command_result.write(convertToCommandResult(takeoff_result));
+            break;
+        }
+        case dji::CommandAction::LANDING_ACTIVATE:
+        {
+            Action::Result landing_result = landingCommand(telemetry);
+            _command_result.write(convertToCommandResult(landing_result));
+            break;
+        }
+        case dji::CommandAction::GOTO_ACTIVATE:
+        {
+            Action::Result goto_result = goToCommand();
+            _command_result.write(convertToCommandResult(goto_result));
+            break;
+        }
+        case dji::CommandAction::MISSION_ACTIVATE:
+        {
+            Mission::Result mission_result = missionCommand();
+            _command_result.write(convertToCommandResult(mission_result));
+            break;
+        }
     }
 
     MavDroneControlTaskBase::updateHook();
@@ -120,57 +166,81 @@ uint8_t MavDroneControlTask::healthCheck(Telemetry const& telemetry)
     return mUnitHealth;
 }
 
-void MavDroneControlTask::issueTakeoffCommand()
+Action::Result MavDroneControlTask::takeoffCommand(Telemetry const& telemetry)
 {
-    // Take off should only be issued along a go to command,
-    // to assure that the drone moves away from the boat ASAP.
+    // Issue take off with a setpoint so the drone moves there
+    // ASAP to avoid colision with the vessel.
     dji::VehicleSetpoint setpoint;
     if (_cmd_pos.read(setpoint) != RTT::NewData)
-        return;
+        return Action::Result::Unknown;
 
-    auto noop = [](Action::Result result) {};
     Action action = Action(mSystem);
-    action.arm();
-    action.takeoff_async(noop);
+    if (telemetry.landed_state() == Telemetry::LandedState::OnGround)
+    {
+        auto drone_arm_result = action.arm();
+        if (drone_arm_result == Action::Result::Success)
+            return action.takeoff();
+        else
+            return drone_arm_result;
+    }
+    else
+    {
+        float current_altitude = telemetry.position().relative_altitude_m;
+        if (abs(current_altitude - _takeoff_altitude.get()) < 1e-2)
+        {
+            samples::RigidBodyState setpoint_rbs;
+            setpoint_rbs.position = setpoint.position;
+
+            Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
+            return action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
+                                        gps_setpoint.altitude,
+                                        -setpoint.heading.getDeg());
+        }
+        return Action::Result::Unknown;
+    }
 }
 
-void MavDroneControlTask::goToCommand()
+Action::Result MavDroneControlTask::goToCommand()
 {
     dji::VehicleSetpoint setpoint;
     if (_cmd_pos.read(setpoint) != RTT::NewData)
-        return;
+        return Action::Result::Unknown;
 
     samples::RigidBodyState setpoint_rbs;
     setpoint_rbs.position = setpoint.position;
 
     Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
-    auto noop = [](Action::Result result) {};
     Action action = Action(mSystem);
-    action.goto_location_async(gps_setpoint.latitude, gps_setpoint.longitude,
-                               gps_setpoint.altitude, -setpoint.heading.getDeg(), noop);
+    return action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
+                                gps_setpoint.altitude, -setpoint.heading.getDeg());
 }
 
-void MavDroneControlTask::landingCommand()
+Action::Result MavDroneControlTask::landingCommand(Telemetry const& telemetry)
 {
-    auto noop = [](Action::Result result) {};
     Action action = Action(mSystem);
-    action.land_async(noop);
+    if (telemetry.landed_state() != Telemetry::LandedState::OnGround)
+        return action.land();
+    else
+        return action.disarm();
 }
 
-void MavDroneControlTask::missionCommand()
+Mission::Result MavDroneControlTask::missionCommand()
 {
     dji::Mission mission;
     if (_cmd_mission.read(mission) != RTT::NewData)
-        return;
+        return Mission::Result::Unknown;
 
-    auto noop = [](Mission::Result result) {};
     Mission mav_mission = Mission(mSystem);
-    Mission::MissionPlan mission_plan = djiMission2MavMissionPlan(mission);
-    mav_mission.upload_mission_async(mission_plan, noop);
+    Mission::MissionPlan mission_plan = convert2MavMissionPlan(mission);
+    auto upload_result = mav_mission.upload_mission(mission_plan);
+    if (upload_result == Mission::Result::Success)
+        return mav_mission.start_mission();
+    else
+        return upload_result;
 }
 
 Mission::MissionPlan
-MavDroneControlTask::djiMission2MavMissionPlan(drone_dji_sdk::Mission const& mission)
+MavDroneControlTask::convert2MavMissionPlan(drone_dji_sdk::Mission const& mission)
 {
     Mission::MissionPlan plan;
     for (auto waypoint : mission.waypoints)

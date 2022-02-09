@@ -135,16 +135,16 @@ argument.
 
         uint8_t healthCheck(mavsdk::Telemetry const& telemetry);
 
-        void issueTakeoffCommand();
+        mavsdk::Action::Result takeoffCommand(mavsdk::Telemetry const& telemetry);
 
-        void goToCommand();
+        mavsdk::Action::Result goToCommand();
 
-        void landingCommand();
+        mavsdk::Action::Result landingCommand(mavsdk::Telemetry const& telemetry);
 
-        void missionCommand();
+        mavsdk::Mission::Result missionCommand();
 
         mavsdk::Mission::MissionPlan
-        djiMission2MavMissionPlan(drone_dji_sdk::Mission const& mission);
+        convert2MavMissionPlan(drone_dji_sdk::Mission const& mission);
 
         power_base::BatteryStatus batteryFeedback(mavsdk::Telemetry const& telemetry);
 

@@ -9,6 +9,26 @@
  */
 
 namespace drone_mavsdk_control {
+    enum CommandResult{
+        Unknown,
+        Success,
+        NoSystem,
+        ConnectionError,
+        Busy,
+        CommandDenied,
+        CommandDeniedLandedStateUnknown,
+        CommandDeniedNotLanded,
+        Timeout,
+        ParameterError,
+        MissionError,
+        TooManyMissionItems,
+        MissionInvalidArgument,
+        UnsupportedMission,
+        NoMissionAvailable,
+        UnsupportedMissionCmd,
+        MissionTransferCancelled,
+        MissionNext
+    };
 }
 
 #endif
