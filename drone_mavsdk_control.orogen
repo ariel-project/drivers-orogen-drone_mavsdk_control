@@ -1,7 +1,5 @@
 name "drone_mavsdk_control"
 
-using_library "mavsdk"
-
 import_types_from "std"
 import_types_from "drone_mavsdk_controlTypes.hpp"
 import_types_from "drone_dji_sdk"
