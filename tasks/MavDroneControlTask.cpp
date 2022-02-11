@@ -25,11 +25,15 @@ static TaskState flightStatusToTaskState(Telemetry::LandedState status)
     switch (status)
     {
         case Telemetry::LandedState::Landing:
+            return TaskState::LANDING;
         case Telemetry::LandedState::TakingOff:
+            return TaskState::TAKING_OFF;
         case Telemetry::LandedState::InAir:
             return TaskState::IN_THE_AIR;
-        default:
+        case Telemetry::LandedState::OnGround:
             return TaskState::ON_THE_GROUND;
+        case Telemetry::LandedState::Unknown:
+            return TaskState::UNKNOWN;
     }
     // Never reached
     throw std::invalid_argument("invalid controller state");
@@ -97,6 +101,7 @@ bool MavDroneControlTask::configureHook()
     reportCommand(DroneCommand::Config, action.set_takeoff_altitude(mTakeoffAltitude));
 
     mUtmConverter.setParameters(_utm_parameters.get());
+    mMaxDistanceFromSetpoint = _max_distance_from_setpoint.get();
     return true;
 }
 bool MavDroneControlTask::startHook()

@@ -132,8 +132,7 @@ argument.
 
         std::shared_ptr<mavsdk::System> mSystem;
         gps_base::UTMConverter mUtmConverter;
-        double mTakeoffAltitude;
-        double mTakeoffFinishedThreshold;
+        double mMaxDistanceFromSetpoint;
 
         HealthStatus healthCheck(mavsdk::Telemetry const& telemetry);
 

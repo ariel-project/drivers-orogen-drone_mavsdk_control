@@ -22,14 +22,11 @@ task_context "MavDroneControlTask" do
     # Command timeout in seconds
     property "timeout", "base/Time"
 
-    # Baudrate
-    property "baudrate", "uint32_t", 230_400
-
     # Takeoff expected altitude
-    property "takeoff_altitude", "double", 1.2
+    property "takeoff_altitude", "double"
 
-    # Threshold for considering that the takeoff has finished
-    property "takeoff_finished_threshold", "double", 0.1
+    # Max distance from the setpoint for go to commands
+    property "max_distance_from_setpoint", "double"
 
     # UTM conversion parameters
     property "utm_parameters", "gps_base/UTMConversionParameters"
@@ -46,5 +43,7 @@ task_context "MavDroneControlTask" do
     output_port "command_feedback", "drone_mavsdk_control/CommandFeedback"
     output_port "unit_health", "drone_mavsdk_control/HealthStatus"
 
-    runtime_states :ON_THE_GROUND, :IN_THE_AIR
+    runtime_states :ON_THE_GROUND, :TAKING_OFF, :LANDING, :IN_THE_AIR, :UNKNOWN
+
+    periodic 0.1
 end
