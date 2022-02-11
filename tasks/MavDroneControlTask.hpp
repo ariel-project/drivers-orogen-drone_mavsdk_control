@@ -130,11 +130,15 @@ argument.
         /** @meta bitfield /drone_mavsdk_control/UnitHealth*/
         HealthStatus mUnitHealth;
 
+        std::unique_ptr<mavsdk::Mavsdk> mMavHandler;
         std::shared_ptr<mavsdk::System> mSystem;
+        std::unique_ptr<mavsdk::Action> mAction;
+        std::unique_ptr<mavsdk::Telemetry> mTelemetry;
+        std::unique_ptr<mavsdk::Mission> mMission;
         gps_base::UTMConverter mUtmConverter;
         double mMaxDistanceFromSetpoint;
 
-        HealthStatus healthCheck(mavsdk::Telemetry const& telemetry);
+        HealthStatus healthCheck(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
 
         void reportCommand(DroneCommand const& command,
                            mavsdk::Action::Result const& result);
@@ -142,20 +146,38 @@ argument.
         void reportCommand(DroneCommand const& command,
                            mavsdk::Mission::Result const& result);
 
-        void takeoffCommand(mavsdk::Telemetry const& telemetry);
+        void takeoffCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+                            std::unique_ptr<mavsdk::Action> const& action);
 
-        void goToCommand();
+        void goToCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+                         std::unique_ptr<mavsdk::Action> const& action);
 
-        void landingCommand(mavsdk::Telemetry const& telemetry);
+        /**
+         * @brief Commands the drone to go to determined setpoint.
+         *
+         * @param telemetry mavsdk::Telemetry unique ptr
+         * @param action mavsdk::Action unique ptr
+         * @param setpoint desired setpoint in NWU
+         * @return true the drone has arrived at the setpoint
+         * @return false the drone hasnt arrived at the setpoint
+         */
+        bool issueGoto(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+                       std::unique_ptr<mavsdk::Action> const& action,
+                       drone_dji_sdk::VehicleSetpoint setpoint);
 
-        void missionCommand();
+        void landingCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+                            std::unique_ptr<mavsdk::Action> const& action);
+
+        void missionCommand(std::unique_ptr<mavsdk::Mission> const& mav_mission);
 
         mavsdk::Mission::MissionPlan
         convert2MavMissionPlan(drone_dji_sdk::Mission const& mission);
 
-        power_base::BatteryStatus batteryFeedback(mavsdk::Telemetry const& telemetry);
+        power_base::BatteryStatus
+        batteryFeedback(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
 
-        base::samples::RigidBodyState poseFeedback(mavsdk::Telemetry const& telemetry);
+        base::samples::RigidBodyState
+        poseFeedback(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
     };
 } // namespace drone_mavsdk_control
 

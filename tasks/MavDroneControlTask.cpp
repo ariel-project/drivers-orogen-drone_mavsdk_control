@@ -83,22 +83,23 @@ bool MavDroneControlTask::configureHook()
 {
     if (!MavDroneControlTaskBase::configureHook())
         return false;
-    Mavsdk mav_handler;
-    mav_handler.set_timeout_s(_timeout.get().toSeconds());
 
-    ConnectionResult connection_result = mav_handler.add_any_connection(_address.get());
+    mMavHandler = unique_ptr<Mavsdk>(new Mavsdk());
+    mMavHandler->set_timeout_s(_timeout.get().toSeconds());
+
+    ConnectionResult connection_result = mMavHandler->add_any_connection(_address.get());
     if (connection_result != ConnectionResult::Success)
     {
-        LOG_ERROR("Unable to connect to device.")
         return false;
     }
 
-    mTakeoffAltitude = _takeoff_altitude.get();
-    mTakeoffFinishedThreshold = _takeoff_finished_threshold.get();
-
-    mSystem = mav_handler.systems().front();
-    auto action = Action(mSystem);
-    reportCommand(DroneCommand::Config, action.set_takeoff_altitude(mTakeoffAltitude));
+    while (mMavHandler->systems().size() == 0) {}
+    mSystem = mMavHandler->systems().front();
+    mTelemetry = unique_ptr<Telemetry>(new Telemetry(mSystem));
+    mAction = unique_ptr<Action>(new Action(mSystem));
+    mMission = unique_ptr<Mission>(new Mission(mSystem));
+    reportCommand(DroneCommand::Config,
+                  mAction->set_takeoff_altitude(_takeoff_altitude.get()));
 
     mUtmConverter.setParameters(_utm_parameters.get());
     mMaxDistanceFromSetpoint = _max_distance_from_setpoint.get();
@@ -113,12 +114,11 @@ bool MavDroneControlTask::startHook()
 }
 void MavDroneControlTask::updateHook()
 {
-    auto telemetry = Telemetry(mSystem);
-    _unit_health.write(healthCheck(telemetry));
-    _pose_samples.write(poseFeedback(telemetry));
-    _battery.write(batteryFeedback(telemetry));
+    _unit_health.write(healthCheck(mTelemetry));
+    _pose_samples.write(poseFeedback(mTelemetry));
+    _battery.write(batteryFeedback(mTelemetry));
 
-    TaskState status = flightStatusToTaskState(telemetry.landed_state());
+    TaskState status = flightStatusToTaskState(mTelemetry->landed_state());
     if (state() != status)
         state(status);
 
@@ -126,45 +126,42 @@ void MavDroneControlTask::updateHook()
     if (_cmd_input.read(cmd) == RTT::NoData)
         return;
 
-    switch (cmd)
+    // Hack to give command priority to external joystick controller
+    if (mTelemetry->flight_mode() != Telemetry::FlightMode::Posctl)
     {
-        case dji::CommandAction::TAKEOFF_ACTIVATE:
+        switch (cmd)
         {
-            takeoffCommand(telemetry);
-            break;
-        }
-        case dji::CommandAction::LANDING_ACTIVATE:
-        {
-            landingCommand(telemetry);
-            break;
-        }
-        case dji::CommandAction::GOTO_ACTIVATE:
-        {
-            goToCommand();
-            break;
-        }
-        case dji::CommandAction::MISSION_ACTIVATE:
-        {
-            missionCommand();
-            break;
+            case dji::CommandAction::TAKEOFF_ACTIVATE:
+            {
+                takeoffCommand(mTelemetry, mAction);
+                break;
+            }
+            case dji::CommandAction::LANDING_ACTIVATE:
+            {
+                landingCommand(mTelemetry, mAction);
+                break;
+            }
+            case dji::CommandAction::GOTO_ACTIVATE:
+            {
+                goToCommand(mTelemetry, mAction);
+                break;
+            }
+            case dji::CommandAction::MISSION_ACTIVATE:
+            {
+                missionCommand(mMission);
+                break;
+            }
         }
     }
-
     MavDroneControlTaskBase::updateHook();
 }
-void MavDroneControlTask::errorHook()
-{
-    MavDroneControlTaskBase::errorHook();
-}
-void MavDroneControlTask::stopHook()
-{
-    MavDroneControlTaskBase::stopHook();
-}
+void MavDroneControlTask::errorHook() { MavDroneControlTaskBase::errorHook(); }
+void MavDroneControlTask::stopHook() { MavDroneControlTaskBase::stopHook(); }
 void MavDroneControlTask::cleanupHook() { MavDroneControlTaskBase::cleanupHook(); }
 
-HealthStatus MavDroneControlTask::healthCheck(Telemetry const& telemetry)
+HealthStatus MavDroneControlTask::healthCheck(unique_ptr<Telemetry> const& telemetry)
 {
-    Telemetry::Health device_health = telemetry.health();
+    Telemetry::Health device_health = telemetry->health();
 
     if (!device_health.is_armable)
         mUnitHealth.status |= UnitHealth::NOT_ARMABLE;
@@ -185,7 +182,8 @@ HealthStatus MavDroneControlTask::healthCheck(Telemetry const& telemetry)
     return mUnitHealth;
 }
 
-void MavDroneControlTask::takeoffCommand(Telemetry const& telemetry)
+void MavDroneControlTask::takeoffCommand(unique_ptr<Telemetry> const& telemetry,
+                                         unique_ptr<Action> const& action)
 {
     // Issue take off with a setpoint so the drone moves there
     // ASAP to avoid colision with the vessel.
@@ -193,77 +191,100 @@ void MavDroneControlTask::takeoffCommand(Telemetry const& telemetry)
     if (_cmd_pos.read(setpoint) != RTT::NewData)
         return;
 
-    Action action = Action(mSystem);
-    if (telemetry.landed_state() == Telemetry::LandedState::OnGround)
+    if (state() == TaskState::ON_THE_GROUND)
     {
-        auto drone_arm_result = action.arm();
+        auto drone_arm_result = action->arm();
         reportCommand(DroneCommand::Arm, drone_arm_result);
         if (drone_arm_result == Action::Result::Success)
         {
-            reportCommand(DroneCommand::Takeoff, action.takeoff());
+            reportCommand(DroneCommand::Takeoff, action->takeoff());
         }
     }
-    else
+    else if (state() == TaskState::IN_THE_AIR)
     {
-        float current_altitude = telemetry.position().relative_altitude_m;
-        if (abs(current_altitude - mTakeoffAltitude) < mTakeoffFinishedThreshold)
-        {
-            samples::RigidBodyState setpoint_rbs;
-            setpoint_rbs.position = setpoint.position;
-
-            Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
-            reportCommand(
-                DroneCommand::Goto,
-                action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
-                                     gps_setpoint.altitude, -setpoint.heading.getDeg()));
-        }
-        reportCommand(DroneCommand::Takeoff, Action::Result::Unknown);
+        issueGoto(telemetry, action, setpoint);
     }
 }
 
-void MavDroneControlTask::goToCommand()
+void MavDroneControlTask::goToCommand(unique_ptr<Telemetry> const& telemetry,
+                                      unique_ptr<Action> const& action)
 {
     dji::VehicleSetpoint setpoint;
     if (_cmd_pos.read(setpoint) != RTT::NewData)
         return;
 
-    samples::RigidBodyState setpoint_rbs;
-    setpoint_rbs.position = setpoint.position;
-
-    Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
-    Action action = Action(mSystem);
-    reportCommand(DroneCommand::Goto,
-                  action.goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
-                                       gps_setpoint.altitude,
-                                       -setpoint.heading.getDeg()));
+    issueGoto(telemetry, action, setpoint);
 }
 
-void MavDroneControlTask::landingCommand(Telemetry const& telemetry)
+bool MavDroneControlTask::issueGoto(unique_ptr<Telemetry> const& telemetry,
+                                    unique_ptr<Action> const& action,
+                                    dji::VehicleSetpoint setpoint)
 {
-    Action action = Action(mSystem);
-    if (telemetry.landed_state() != Telemetry::LandedState::OnGround)
+    Telemetry::Position mav_position = telemetry->position();
+    Solution gps_position;
+    gps_position.latitude = mav_position.latitude_deg;
+    gps_position.longitude = mav_position.longitude_deg;
+    gps_position.altitude = mav_position.absolute_altitude_m;
+    Vector3d position = mUtmConverter.convertToNWU(gps_position).position;
+
+    if ((position - setpoint.position).norm() > mMaxDistanceFromSetpoint)
     {
-        reportCommand(DroneCommand::Land, action.land());
+        // Correct to use distance to the from as altitude
+        double origin_altitude = telemetry->position().absolute_altitude_m -
+                                 telemetry->position().relative_altitude_m;
+        setpoint.position[2] += origin_altitude;
+
+        samples::RigidBodyState setpoint_rbs;
+        setpoint_rbs.position = setpoint.position;
+        Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
+
+        reportCommand(DroneCommand::Goto,
+                      action->goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
+                                            gps_setpoint.altitude,
+                                            -setpoint.heading.getDeg()));
+        return false;
     }
     else
+        return true;
+}
+
+void MavDroneControlTask::landingCommand(unique_ptr<Telemetry> const& telemetry,
+                                         unique_ptr<Action> const& action)
+{
+    dji::VehicleSetpoint setpoint;
+    if (_cmd_pos.read(setpoint) != RTT::NewData)
+        return;
+
+    // Issue go_to to prepare for landing.
+    bool arrived_at_setpoint = true;
+    if (state() != TaskState::LANDING && state() != TaskState::ON_THE_GROUND)
+        arrived_at_setpoint = issueGoto(telemetry, action, setpoint);
+
+    if (arrived_at_setpoint)
     {
-        reportCommand(DroneCommand::Disarm, action.disarm());
+        if (state() != TaskState::ON_THE_GROUND)
+        {
+            reportCommand(DroneCommand::Land, action->land());
+        }
+        else
+        {
+            reportCommand(DroneCommand::Disarm, action->disarm());
+        }
     }
 }
 
-void MavDroneControlTask::missionCommand()
+void MavDroneControlTask::missionCommand(unique_ptr<Mission> const& mav_mission)
 {
     dji::Mission mission;
     if (_cmd_mission.read(mission) != RTT::NewData)
         return;
 
-    Mission mav_mission = Mission(mSystem);
     Mission::MissionPlan mission_plan = convert2MavMissionPlan(mission);
-    auto upload_result = mav_mission.upload_mission(mission_plan);
+    auto upload_result = mav_mission->upload_mission(mission_plan);
     reportCommand(DroneCommand::MissionUpload, upload_result);
     if (upload_result == Mission::Result::Success)
     {
-        reportCommand(DroneCommand::MissionStart, mav_mission.start_mission());
+        reportCommand(DroneCommand::MissionStart, mav_mission->start_mission());
     }
 }
 
@@ -339,7 +360,7 @@ void MavDroneControlTask::reportCommand(DroneCommand const& command,
 }
 
 Mission::MissionPlan
-MavDroneControlTask::convert2MavMissionPlan(drone_dji_sdk::Mission const& mission)
+MavDroneControlTask::convert2MavMissionPlan(dji::Mission const& mission)
 {
     Mission::MissionPlan plan;
     for (auto waypoint : mission.waypoints)
@@ -361,39 +382,41 @@ MavDroneControlTask::convert2MavMissionPlan(drone_dji_sdk::Mission const& missio
     return plan;
 }
 
-BatteryStatus MavDroneControlTask::batteryFeedback(Telemetry const& telemetry)
+BatteryStatus MavDroneControlTask::batteryFeedback(unique_ptr<Telemetry> const& telemetry)
 {
     // Get battery info. This method returns information about 1 battery.
     // I am not sure if this would be an issue with DJI drones (they send info
     // about batteries as a whole, no matter the number of batteries).
-    Telemetry::Battery battery = telemetry.battery();
+    Telemetry::Battery battery = telemetry->battery();
     BatteryStatus status;
     status.voltage = battery.voltage_v;
     status.charge = battery.remaining_percent;
+    status.time = base::Time::now();
     return status;
 }
 
-samples::RigidBodyState MavDroneControlTask::poseFeedback(Telemetry const& telemetry)
+samples::RigidBodyState
+MavDroneControlTask::poseFeedback(unique_ptr<Telemetry> const& telemetry)
 {
-    Telemetry::Position mav_position = telemetry.position();
+    Telemetry::Position mav_position = telemetry->position();
     Solution gps_position;
     gps_position.latitude = mav_position.latitude_deg;
     gps_position.longitude = mav_position.longitude_deg;
     gps_position.altitude = mav_position.absolute_altitude_m;
 
     samples::RigidBodyState pose = mUtmConverter.convertToNWU(gps_position);
-    Telemetry::VelocityNed mav_vel = telemetry.velocity_ned();
+    Telemetry::VelocityNed mav_vel = telemetry->velocity_ned();
     pose.velocity.x() = mav_vel.north_m_s;
     pose.velocity.y() = -mav_vel.east_m_s;
     pose.velocity.z() = -mav_vel.down_m_s;
 
     Telemetry::AngularVelocityBody mav_ang_vel =
-        telemetry.attitude_angular_velocity_body();
+        telemetry->attitude_angular_velocity_body();
     pose.angular_velocity.x() = mav_ang_vel.roll_rad_s;
     pose.angular_velocity.y() = -mav_ang_vel.pitch_rad_s;
     pose.angular_velocity.z() = -mav_ang_vel.yaw_rad_s;
 
-    Telemetry::Quaternion mav_orientation = telemetry.attitude_quaternion();
+    Telemetry::Quaternion mav_orientation = telemetry->attitude_quaternion();
     Quaterniond q_bodyned2ned(mav_orientation.w, mav_orientation.x, mav_orientation.y,
                               mav_orientation.z);
     Quaterniond q_ned2nwu = Quaterniond(AngleAxisd(M_PI, Vector3d::UnitX()));
