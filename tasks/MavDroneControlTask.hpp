@@ -147,28 +147,19 @@ argument.
                            mavsdk::Mission::Result const& result);
 
         void takeoffCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                            std::unique_ptr<mavsdk::Action> const& action);
+                            std::unique_ptr<mavsdk::Action> const& action,
+                            drone_dji_sdk::VehicleSetpoint const& setpoint);
 
-        void goToCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                         std::unique_ptr<mavsdk::Action> const& action);
-
-        /**
-         * @brief Commands the drone to go to determined setpoint.
-         *
-         * @param telemetry mavsdk::Telemetry unique ptr
-         * @param action mavsdk::Action unique ptr
-         * @param setpoint desired setpoint in NWU
-         * @return true the drone has arrived at the setpoint
-         * @return false the drone hasnt arrived at the setpoint
-         */
-        bool issueGoto(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                       std::unique_ptr<mavsdk::Action> const& action,
-                       drone_dji_sdk::VehicleSetpoint setpoint);
+        bool goToCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+                         std::unique_ptr<mavsdk::Action> const& action,
+                         drone_dji_sdk::VehicleSetpoint const& setpoint);
 
         void landingCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                            std::unique_ptr<mavsdk::Action> const& action);
+                            std::unique_ptr<mavsdk::Action> const& action,
+                            drone_dji_sdk::VehicleSetpoint const& setpoint);
 
-        void missionCommand(std::unique_ptr<mavsdk::Mission> const& mav_mission);
+        void missionCommand(std::unique_ptr<mavsdk::Mission> const& mav_mission,
+                            drone_dji_sdk::Mission const& mission);
 
         mavsdk::Mission::MissionPlan
         convert2MavMissionPlan(drone_dji_sdk::Mission const& mission);
