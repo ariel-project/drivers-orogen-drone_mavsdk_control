@@ -110,6 +110,7 @@ bool MavDroneControlTask::startHook()
     if (!MavDroneControlTaskBase::startHook())
         return false;
 
+    mLastMission = dji::Mission();
     return true;
 }
 void MavDroneControlTask::updateHook()
@@ -275,6 +276,9 @@ void MavDroneControlTask::landingCommand(unique_ptr<Telemetry> const& telemetry,
 void MavDroneControlTask::missionCommand(unique_ptr<Mission> const& mav_mission,
                                          dji::Mission const& mission_parameters)
 {
+    if (mLastMission == mission_parameters)
+        return;
+    mLastMission = mission_parameters;
 
     Mission::MissionPlan mission_plan = convert2MavMissionPlan(mission_parameters);
     auto upload_result = mav_mission->upload_mission(mission_plan);

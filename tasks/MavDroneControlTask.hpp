@@ -137,6 +137,7 @@ argument.
         std::unique_ptr<mavsdk::Mission> mMission;
         gps_base::UTMConverter mUtmConverter;
         double mMaxDistanceFromSetpoint;
+        drone_dji_sdk::Mission mLastMission;
 
         HealthStatus healthCheck(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
 
