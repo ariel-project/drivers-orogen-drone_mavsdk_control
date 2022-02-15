@@ -7,5 +7,10 @@
   
   <depend package="base/cmake" />
   <depend package="base/types"/>
+  <depend package="base/logging"/>
   <depend package="drivers/mavsdk"/>
+  <depend package="drivers/gps_base"/>
+  <depend package="drivers/orogen/gps_base"/>
+  <depend package="drivers/orogen/power_base"/>
+  <depend package="drivers/orogen/drone_dji_sdk"/>
 </package>
