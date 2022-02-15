@@ -93,7 +93,13 @@ bool MavDroneControlTask::configureHook()
         return false;
     }
 
-    while (mMavHandler->systems().size() == 0) {}
+    base::Time timeout_init = base::Time::now();
+    while (mMavHandler->systems().size() == 0)
+    {
+        usleep(10000);
+        if (base::Time::now() - timeout_init > base::Time::fromSeconds(1))
+            return false;
+    }
     mSystem = mMavHandler->systems().front();
     mTelemetry = unique_ptr<Telemetry>(new Telemetry(mSystem));
     mAction = unique_ptr<Action>(new Action(mSystem));

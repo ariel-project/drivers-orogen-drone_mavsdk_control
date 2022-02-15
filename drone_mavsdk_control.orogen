@@ -22,7 +22,8 @@ task_context "MavDroneControlTask" do
     # Command timeout in seconds
     property "timeout", "base/Time"
 
-    # Takeoff expected altitude
+    # Takeoff expected altitude. Check for a pre-determineed minimum altitude for takeoff
+    # for the drone being used.
     property "takeoff_altitude", "double"
 
     # Max distance from the setpoint for go to commands
