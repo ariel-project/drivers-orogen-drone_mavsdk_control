@@ -11,8 +11,8 @@
 #include "mavsdk/plugins/action/action.h"
 #include "mavsdk/plugins/mission/mission.h"
 #include "mavsdk/plugins/telemetry/telemetry.h"
-#include <gps_base/BaseTypes.hpp>
-#include <gps_base/UTMConverter.hpp>
+#include "gps_base/BaseTypes.hpp"
+#include "gps_base/UTMConverter.hpp"
 
 namespace drone_mavsdk_control
 {
