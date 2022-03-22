@@ -157,7 +157,7 @@ void MavDroneControlTask::updateHook()
             landingCommand(mTelemetry, mAction, setpoint);
             break;
         }
-        case dji::CommandAction::GOTO_ACTIVATE:
+        case dji::CommandAction::POS_CONTROL_ACTIVATE:
         {
             dji::VehicleSetpoint setpoint;
             if (_cmd_pos.read(setpoint) != RTT::NewData)
@@ -175,6 +175,9 @@ void MavDroneControlTask::updateHook()
             missionCommand(mMission, mission_parameters);
             break;
         }
+        case dji::CommandAction::VEL_CONTROL_ACTIVATE:
+            // TODO
+            throw std::invalid_argument("Invalid command argument.");
     }
     MavDroneControlTaskBase::updateHook();
 }
@@ -248,7 +251,7 @@ bool MavDroneControlTask::goToCommand(unique_ptr<Telemetry> const& telemetry,
     reportCommand(DroneCommand::Goto,
                   action->goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
                                         gps_setpoint.altitude,
-                                        -setpoint.heading.getDeg()));
+                                        -setpoint.yaw.getDeg()));
     return false;
 }
 
