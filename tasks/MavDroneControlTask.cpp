@@ -130,7 +130,7 @@ void MavDroneControlTask::updateHook()
         state(status);
 
     dji::CommandAction cmd;
-    if (_cmd_input.read(cmd) == RTT::NoData)
+    if (_cmd_action.read(cmd) == RTT::NoData)
         return;
 
     // Hack to give command priority to external joystick controller
@@ -142,7 +142,7 @@ void MavDroneControlTask::updateHook()
         case dji::CommandAction::TAKEOFF_ACTIVATE:
         {
             dji::VehicleSetpoint setpoint;
-            if (_cmd_pos.read(setpoint) != RTT::NewData)
+            if (_cmd_setpoint.read(setpoint) != RTT::NewData)
                 return;
 
             takeoffCommand(mTelemetry, mAction, setpoint);
@@ -151,7 +151,7 @@ void MavDroneControlTask::updateHook()
         case dji::CommandAction::LANDING_ACTIVATE:
         {
             dji::VehicleSetpoint setpoint;
-            if (_cmd_pos.read(setpoint) != RTT::NewData)
+            if (_cmd_setpoint.read(setpoint) != RTT::NewData)
                 return;
 
             landingCommand(mTelemetry, mAction, setpoint);
@@ -160,7 +160,7 @@ void MavDroneControlTask::updateHook()
         case dji::CommandAction::POS_CONTROL_ACTIVATE:
         {
             dji::VehicleSetpoint setpoint;
-            if (_cmd_pos.read(setpoint) != RTT::NewData)
+            if (_cmd_setpoint.read(setpoint) != RTT::NewData)
                 return;
 
             goToCommand(mTelemetry, mAction, setpoint);
