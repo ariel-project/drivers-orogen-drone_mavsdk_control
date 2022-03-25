@@ -33,9 +33,9 @@ task_context "MavDroneControlTask" do
     property "utm_parameters", "gps_base/UTMConversionParameters"
 
     # Command sent to the drone
-    input_port "cmd_input", "drone_dji_sdk/CommandAction"
+    input_port "cmd_action", "drone_dji_sdk/CommandAction"
 
-    input_port "cmd_pos", "drone_dji_sdk/VehicleSetpoint"
+    input_port "cmd_setpoint", "drone_dji_sdk/VehicleSetpoint"
 
     input_port "cmd_mission", "drone_dji_sdk/Mission"
 
