@@ -9,6 +9,7 @@
 #include "drone_mavsdk_controlTypes.hpp"
 #include "mavsdk/mavsdk.h"
 #include "mavsdk/plugins/action/action.h"
+#include "mavsdk/plugins/offboard/offboard.h"
 #include "mavsdk/plugins/mission/mission.h"
 #include "mavsdk/plugins/telemetry/telemetry.h"
 #include "gps_base/BaseTypes.hpp"
@@ -130,11 +131,13 @@ argument.
         /** @meta bitfield /drone_mavsdk_control/UnitHealth*/
         HealthStatus mUnitHealth;
 
-        std::unique_ptr<mavsdk::Mavsdk> mMavHandler;
         std::shared_ptr<mavsdk::System> mSystem;
+        std::unique_ptr<mavsdk::Mavsdk> mMavHandler;
         std::unique_ptr<mavsdk::Action> mAction;
         std::unique_ptr<mavsdk::Telemetry> mTelemetry;
         std::unique_ptr<mavsdk::Mission> mMission;
+        std::unique_ptr<mavsdk::Offboard> mOffboard;
+        mavsdk::Offboard::Result mControllerStarted;
         gps_base::UTMConverter mUtmConverter;
         double mMaxDistanceFromSetpoint;
         drone_dji_sdk::Mission mLastMission;
@@ -147,16 +150,24 @@ argument.
         void reportCommand(DroneCommand const& command,
                            mavsdk::Mission::Result const& result);
 
+        void reportCommand(DroneCommand const& command,
+                           mavsdk::Offboard::Result const& result);
+
         void takeoffCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
                             std::unique_ptr<mavsdk::Action> const& action,
+                            std::unique_ptr<mavsdk::Offboard> const& offboard,
                             drone_dji_sdk::VehicleSetpoint const& setpoint);
 
-        bool goToCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                         std::unique_ptr<mavsdk::Action> const& action,
-                         drone_dji_sdk::VehicleSetpoint const& setpoint);
+        bool posCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+                        std::unique_ptr<mavsdk::Offboard> const& offboard,
+                        drone_dji_sdk::VehicleSetpoint const& setpoint);
+
+        bool velCommand(std::unique_ptr<mavsdk::Offboard> const& offboard,
+                        drone_dji_sdk::VehicleSetpoint const& setpoint);
 
         void landingCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
                             std::unique_ptr<mavsdk::Action> const& action,
+                            std::unique_ptr<mavsdk::Offboard> const& offboard,
                             drone_dji_sdk::VehicleSetpoint const& setpoint);
 
         void missionCommand(std::unique_ptr<mavsdk::Mission> const& mav_mission,

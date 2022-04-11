@@ -79,6 +79,24 @@ static CommandResult convertToCommandResult(Mission::Result result)
     }
 }
 
+static CommandResult convertToCommandResult(Offboard::Result result)
+{
+    switch (result)
+    {
+        case Offboard::Result::Unknown:
+            return CommandResult::Unknown;
+        case Offboard::Result::Success:
+            return CommandResult::Success;
+        case Offboard::Result::CommandDenied:
+            return CommandResult::CommandDenied;
+        case Offboard::Result::Busy:
+            return CommandResult::Busy;
+        default:
+            throw std::invalid_argument(
+                "Invalid mission result. It should probably have thrown an exception");
+    }
+}
+
 bool MavDroneControlTask::configureHook()
 {
     if (!MavDroneControlTaskBase::configureHook())
@@ -104,8 +122,10 @@ bool MavDroneControlTask::configureHook()
     mTelemetry = unique_ptr<Telemetry>(new Telemetry(mSystem));
     mAction = unique_ptr<Action>(new Action(mSystem));
     mMission = unique_ptr<Mission>(new Mission(mSystem));
-    reportCommand(DroneCommand::Config,
-                  mAction->set_takeoff_altitude(_takeoff_altitude.get()));
+    mOffboard = unique_ptr<Offboard>(new Offboard(mSystem));
+    reportCommand(
+        DroneCommand::Config,
+        mAction->set_takeoff_altitude(_takeoff_altitude.get()));
 
     mUtmConverter.setParameters(_utm_parameters.get());
     mMaxDistanceFromSetpoint = _max_distance_from_setpoint.get();
@@ -116,6 +136,7 @@ bool MavDroneControlTask::startHook()
     if (!MavDroneControlTaskBase::startHook())
         return false;
 
+    mControllerStarted = Offboard::Result::Unknown;
     mLastMission = dji::Mission();
     return true;
 }
@@ -145,7 +166,7 @@ void MavDroneControlTask::updateHook()
             if (_cmd_setpoint.read(setpoint) != RTT::NewData)
                 return;
 
-            takeoffCommand(mTelemetry, mAction, setpoint);
+            takeoffCommand(mTelemetry, mAction, mOffboard, setpoint);
             break;
         }
         case dji::CommandAction::LANDING_ACTIVATE:
@@ -154,7 +175,7 @@ void MavDroneControlTask::updateHook()
             if (_cmd_setpoint.read(setpoint) != RTT::NewData)
                 return;
 
-            landingCommand(mTelemetry, mAction, setpoint);
+            landingCommand(mTelemetry, mAction, mOffboard, setpoint);
             break;
         }
         case dji::CommandAction::POS_CONTROL_ACTIVATE:
@@ -163,9 +184,16 @@ void MavDroneControlTask::updateHook()
             if (_cmd_setpoint.read(setpoint) != RTT::NewData)
                 return;
 
-            goToCommand(mTelemetry, mAction, setpoint);
+            posCommand(mTelemetry, mOffboard, setpoint);
             break;
         }
+        case dji::CommandAction::VEL_CONTROL_ACTIVATE:
+            dji::VehicleSetpoint setpoint;
+            if (_cmd_setpoint.read(setpoint) != RTT::NewData)
+                return;
+
+            velCommand(mOffboard, setpoint);
+            break;
         case dji::CommandAction::MISSION_ACTIVATE:
         {
             dji::Mission mission_parameters;
@@ -175,14 +203,15 @@ void MavDroneControlTask::updateHook()
             missionCommand(mMission, mission_parameters);
             break;
         }
-        case dji::CommandAction::VEL_CONTROL_ACTIVATE:
-            // TODO
-            throw std::invalid_argument("Invalid command argument.");
     }
     MavDroneControlTaskBase::updateHook();
 }
 void MavDroneControlTask::errorHook() { MavDroneControlTaskBase::errorHook(); }
-void MavDroneControlTask::stopHook() { MavDroneControlTaskBase::stopHook(); }
+void MavDroneControlTask::stopHook()
+{
+    mOffboard->stop();
+    MavDroneControlTaskBase::stopHook();
+}
 void MavDroneControlTask::cleanupHook() { MavDroneControlTaskBase::cleanupHook(); }
 
 HealthStatus MavDroneControlTask::healthCheck(unique_ptr<Telemetry> const& telemetry)
@@ -208,9 +237,11 @@ HealthStatus MavDroneControlTask::healthCheck(unique_ptr<Telemetry> const& telem
     return mUnitHealth;
 }
 
-void MavDroneControlTask::takeoffCommand(unique_ptr<Telemetry> const& telemetry,
-                                         unique_ptr<Action> const& action,
-                                         dji::VehicleSetpoint const& setpoint)
+void MavDroneControlTask::takeoffCommand(
+    unique_ptr<Telemetry> const& telemetry,
+    unique_ptr<Action> const& action,
+    unique_ptr<Offboard> const& offboard,
+    dji::VehicleSetpoint const& setpoint)
 {
     // Issue take off with a setpoint so the drone moves there
     // ASAP to avoid colision with the vessel.
@@ -224,12 +255,13 @@ void MavDroneControlTask::takeoffCommand(unique_ptr<Telemetry> const& telemetry,
         }
     }
     else if (state() == TaskState::IN_THE_AIR)
-        goToCommand(telemetry, action, setpoint);
+        posCommand(telemetry, offboard, setpoint);
 }
 
-bool MavDroneControlTask::goToCommand(unique_ptr<Telemetry> const& telemetry,
-                                      unique_ptr<Action> const& action,
-                                      dji::VehicleSetpoint const& setpoint)
+bool MavDroneControlTask::posCommand(
+    unique_ptr<Telemetry> const& telemetry,
+    unique_ptr<Offboard> const& offboard,
+    dji::VehicleSetpoint const& setpoint)
 {
     Telemetry::Position mav_position = telemetry->position();
     Solution gps_position;
@@ -248,16 +280,49 @@ bool MavDroneControlTask::goToCommand(unique_ptr<Telemetry> const& telemetry,
     setpoint_rbs.position = setpoint_absolute_altitude;
     Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
 
-    reportCommand(DroneCommand::Goto,
-                  action->goto_location(gps_setpoint.latitude, gps_setpoint.longitude,
-                                        gps_setpoint.altitude,
-                                        -setpoint.yaw.getDeg()));
+    Offboard::PositionGlobalYaw pos_cmd;
+    pos_cmd.lat_deg = gps_setpoint.latitude;
+    pos_cmd.lon_deg = gps_setpoint.longitude;
+    pos_cmd.alt_m = gps_setpoint.altitude;
+    pos_cmd.yaw_deg = -setpoint.yaw.getDeg();
+
+    reportCommand(DroneCommand::PosControl, offboard->set_position_global(pos_cmd));
+    if (offboard->start() != Offboard::Result::Success)
+        return false;
+
     return false;
 }
 
-void MavDroneControlTask::landingCommand(unique_ptr<Telemetry> const& telemetry,
-                                         unique_ptr<Action> const& action,
-                                         dji::VehicleSetpoint const& setpoint)
+bool MavDroneControlTask::velCommand(
+    unique_ptr<Offboard> const& offboard,
+    dji::VehicleSetpoint const& setpoint)
+{
+    if (mControllerStarted == Offboard::Result::Unknown)
+    {
+        // Send it once before starting offboard, otherwise it will be rejected.
+        Offboard::VelocityNedYaw stay{};
+        offboard->set_velocity_ned(stay);
+        mControllerStarted = offboard->start();
+    }
+
+    Offboard::VelocityNedYaw vel_cmd;
+    vel_cmd.north_m_s = setpoint.velocity[0];
+    vel_cmd.east_m_s = -setpoint.velocity[1];
+    vel_cmd.down_m_s = -setpoint.velocity[2];
+    vel_cmd.yaw_deg = -setpoint.yaw_rate.getDeg();
+    reportCommand(DroneCommand::VelControl, offboard->set_velocity_ned(vel_cmd));
+
+    if (mOffboard->start() != Offboard::Result::Success)
+        return false;
+
+    return true;
+}
+
+void MavDroneControlTask::landingCommand(
+    unique_ptr<Telemetry> const& telemetry,
+    unique_ptr<Action> const& action,
+    unique_ptr<Offboard> const& offboard,
+    dji::VehicleSetpoint const& setpoint)
 {
     if (state() == TaskState::ON_THE_GROUND)
     {
@@ -267,14 +332,15 @@ void MavDroneControlTask::landingCommand(unique_ptr<Telemetry> const& telemetry,
     {
         reportCommand(DroneCommand::Land, action->land());
     }
-    else if (goToCommand(telemetry, action, setpoint))
+    else if (posCommand(telemetry, offboard, setpoint))
     {
         reportCommand(DroneCommand::Land, action->land());
     }
 }
 
-void MavDroneControlTask::missionCommand(unique_ptr<Mission> const& mav_mission,
-                                         dji::Mission const& mission_parameters)
+void MavDroneControlTask::missionCommand(
+    unique_ptr<Mission> const& mav_mission,
+    dji::Mission const& mission_parameters)
 {
     if (mLastMission == mission_parameters)
         return;
@@ -286,8 +352,9 @@ void MavDroneControlTask::missionCommand(unique_ptr<Mission> const& mav_mission,
     reportCommand(DroneCommand::MissionStart, mav_mission->start_mission());
 }
 
-void MavDroneControlTask::reportCommand(DroneCommand const& command,
-                                        Action::Result const& result)
+void MavDroneControlTask::reportCommand(
+    DroneCommand const& command,
+    Action::Result const& result)
 {
     switch (result)
     {
@@ -320,8 +387,9 @@ void MavDroneControlTask::reportCommand(DroneCommand const& command,
     }
 }
 
-void MavDroneControlTask::reportCommand(DroneCommand const& command,
-                                        Mission::Result const& result)
+void MavDroneControlTask::reportCommand(
+    DroneCommand const& command,
+    Mission::Result const& result)
 {
     switch (result)
     {
@@ -346,6 +414,36 @@ void MavDroneControlTask::reportCommand(DroneCommand const& command,
         case Mission::Result::Success:
         case Mission::Result::Busy:
         case Mission::Result::TransferCancelled:
+        {
+            CommandFeedback feedback;
+            feedback.time = base::Time::now();
+            feedback.command = command;
+            feedback.result = convertToCommandResult(result);
+            _command_feedback.write(feedback);
+            break;
+        }
+    }
+}
+
+void MavDroneControlTask::reportCommand(
+    DroneCommand const& command,
+    Offboard::Result const& result)
+{
+    switch (result)
+    {
+        case Offboard::Result::NoSystem:
+            throw DeviceError(
+                "Offboard command failed: could not find any system to issue command.");
+        case Offboard::Result::ConnectionError:
+            throw DeviceError("Command failed: failed to connect with provided address");
+        case Offboard::Result::Timeout:
+            throw std::runtime_error("Offboard command failed: timed out");
+        case Offboard::Result::NoSetpointSet:
+            throw DeviceError("Command failed: Cannot start without setpoint set");
+        case Offboard::Result::Success:
+        case Offboard::Result::Unknown:
+        case Offboard::Result::Busy:
+        case Offboard::Result::CommandDenied:
         {
             CommandFeedback feedback;
             feedback.time = base::Time::now();
@@ -415,8 +513,11 @@ MavDroneControlTask::poseFeedback(unique_ptr<Telemetry> const& telemetry)
     pose.angular_velocity.z() = -mav_ang_vel.yaw_rad_s;
 
     Telemetry::Quaternion mav_orientation = telemetry->attitude_quaternion();
-    Quaterniond q_bodyned2ned(mav_orientation.w, mav_orientation.x, mav_orientation.y,
-                              mav_orientation.z);
+    Quaterniond q_bodyned2ned(
+        mav_orientation.w,
+        mav_orientation.x,
+        mav_orientation.y,
+        mav_orientation.z);
     Quaterniond q_ned2nwu = Quaterniond(AngleAxisd(M_PI, Vector3d::UnitX()));
     Quaterniond q_bodynwu2nwu = q_ned2nwu * q_bodyned2ned * q_ned2nwu.conjugate();
     pose.orientation = q_bodynwu2nwu;

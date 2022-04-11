@@ -13,6 +13,7 @@ TARGET_LINK_LIBRARIES(${DRONE_MAVSDK_CONTROL_TASKLIB_NAME}
     ${QT_LIBRARIES}
     ${DRONE_MAVSDK_CONTROL_TASKLIB_DEPENDENT_LIBRARIES}
     MAVSDK::mavsdk
+    MAVSDK::mavsdk_offboard
     MAVSDK::mavsdk_action
     MAVSDK::mavsdk_telemetry 
     MAVSDK::mavsdk_mission

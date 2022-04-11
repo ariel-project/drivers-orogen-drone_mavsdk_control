@@ -38,7 +38,8 @@ namespace drone_mavsdk_control
         Disarm,
         Takeoff,
         Land,
-        Goto,
+        PosControl,
+        VelControl,
         MissionUpload,
         MissionStart
     };
