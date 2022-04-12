@@ -19,26 +19,6 @@ MavDroneControlTask::~MavDroneControlTask() {}
 // hooks defined by Orocos::RTT. See MavDroneControlTask.hpp for more detailed
 // documentation about them.
 
-typedef MavDroneControlTask::States TaskState;
-static TaskState flightStatusToTaskState(Telemetry::LandedState status)
-{
-    switch (status)
-    {
-        case Telemetry::LandedState::Landing:
-            return TaskState::LANDING;
-        case Telemetry::LandedState::TakingOff:
-            return TaskState::TAKING_OFF;
-        case Telemetry::LandedState::InAir:
-            return TaskState::IN_THE_AIR;
-        case Telemetry::LandedState::OnGround:
-            return TaskState::ON_THE_GROUND;
-        case Telemetry::LandedState::Unknown:
-            return TaskState::UNKNOWN;
-    }
-    // Never reached
-    throw std::invalid_argument("invalid controller state");
-}
-
 static CommandResult convertToCommandResult(Action::Result result)
 {
     switch (result)
@@ -97,6 +77,55 @@ static CommandResult convertToCommandResult(Offboard::Result result)
     }
 }
 
+MavDroneControlTask::States
+MavDroneControlTask::flightStatus(mavsdk::Telemetry::FlightMode flight_status)
+{
+    MavDroneControlTask::States current_state = state();
+    switch (current_state)
+    {
+        case TELEMETRY:
+        {
+            if(_cmd_action.connected())
+            {
+                return CONTROLLING;
+            }
+            else
+            {
+                return TELEMETRY;
+            }
+        }
+        case CONTROLLING:
+        {
+            bool can_take_control = canTakeControl(flight_status);
+            if(!_cmd_action.connected())
+            {
+                return TELEMETRY;
+            }
+            else if(can_take_control)
+            {
+                return CONTROLLING;
+            }
+            else
+            {
+                return CONTROL_LOST;
+            }
+        }
+        case CONTROL_LOST:
+        {
+            if (_cmd_action.connected())
+            {
+                return CONTROL_LOST;
+            }
+            else
+            {
+                return TELEMETRY;
+            }
+        }
+        default:
+            return current_state;
+    }
+}
+
 bool MavDroneControlTask::configureHook()
 {
     if (!MavDroneControlTaskBase::configureHook())
@@ -131,6 +160,7 @@ bool MavDroneControlTask::configureHook()
     mMaxDistanceFromSetpoint = _max_distance_from_setpoint.get();
     return true;
 }
+
 bool MavDroneControlTask::startHook()
 {
     if (!MavDroneControlTaskBase::startHook())
@@ -138,24 +168,36 @@ bool MavDroneControlTask::startHook()
 
     mControllerStarted = Offboard::Result::Unknown;
     mLastMission = dji::Mission();
+    state(TELEMETRY);
+
     return true;
 }
+
+void MavDroneControlTask::applyTransition(
+    MavDroneControlTask::States const& next_state)
+{
+    if (next_state != CONTROLLING)
+    {
+        return;
+    }
+    state(CONTROL_LOST);
+}
+
 void MavDroneControlTask::updateHook()
 {
     _unit_health.write(healthCheck(mTelemetry));
     _pose_samples.write(poseFeedback(mTelemetry));
     _battery.write(batteryFeedback(mTelemetry));
 
-    TaskState status = flightStatusToTaskState(mTelemetry->landed_state());
+    States status = flightStatus(mTelemetry->flight_mode());
     if (state() != status)
+    {
+        applyTransition(status);
         state(status);
+    }
 
     dji::CommandAction cmd;
     if (_cmd_action.read(cmd) == RTT::NoData)
-        return;
-
-    // Hack to give command priority to external joystick controller
-    if (mTelemetry->flight_mode() == Telemetry::FlightMode::Posctl)
         return;
 
     switch (cmd)
@@ -247,7 +289,7 @@ void MavDroneControlTask::takeoffCommand(
 {
     // Issue take off with a setpoint so the drone moves there
     // ASAP to avoid colision with the vessel.
-    if (state() == TaskState::ON_THE_GROUND)
+    if (mTelemetry->landed_state() == Telemetry::LandedState::OnGround)
     {
         auto drone_arm_result = action->arm();
         reportCommand(DroneCommand::Arm, drone_arm_result);
@@ -256,7 +298,7 @@ void MavDroneControlTask::takeoffCommand(
             reportCommand(DroneCommand::Takeoff, action->takeoff());
         }
     }
-    else if (state() == TaskState::IN_THE_AIR)
+    else if (mTelemetry->landed_state() == Telemetry::LandedState::InAir)
         posCommand(telemetry, offboard, setpoint);
 }
 
@@ -327,11 +369,11 @@ void MavDroneControlTask::landingCommand(
     unique_ptr<Offboard> const& offboard,
     dji::VehicleSetpoint const& setpoint)
 {
-    if (state() == TaskState::ON_THE_GROUND)
+    if (mTelemetry->landed_state() == Telemetry::LandedState::OnGround)
     {
         reportCommand(DroneCommand::Disarm, action->disarm());
     }
-    else if (state() == TaskState::LANDING)
+    else if (mTelemetry->landed_state() == Telemetry::LandedState::Landing)
     {
         reportCommand(DroneCommand::Land, action->land());
     }
@@ -527,4 +569,9 @@ MavDroneControlTask::poseFeedback(unique_ptr<Telemetry> const& telemetry)
 
     pose.time = base::Time::now();
     return pose;
+}
+
+bool MavDroneControlTask::canTakeControl(mavsdk::Telemetry::FlightMode flight_status)
+{
+    return (flight_status != Telemetry::FlightMode::Posctl);
 }

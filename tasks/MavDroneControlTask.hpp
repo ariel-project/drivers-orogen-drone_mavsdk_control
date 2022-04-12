@@ -116,7 +116,6 @@ argument.
         void cleanupHook();
 
       private:
-        typedef MavDroneControlTask::States TaskState;
 
         enum UnitHealth
         {
@@ -172,6 +171,12 @@ argument.
 
         void missionCommand(std::unique_ptr<mavsdk::Mission> const& mav_mission,
                             drone_dji_sdk::Mission const& mission);
+
+        void applyTransition(MavDroneControlTask::States const& next_state);
+
+        bool canTakeControl(mavsdk::Telemetry::FlightMode flight_status);
+
+        States flightStatus(mavsdk::Telemetry::FlightMode flight_status);
 
         mavsdk::Mission::MissionPlan
         convert2MavMissionPlan(drone_dji_sdk::Mission const& mission);
