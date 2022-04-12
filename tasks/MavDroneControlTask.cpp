@@ -188,12 +188,14 @@ void MavDroneControlTask::updateHook()
             break;
         }
         case dji::CommandAction::VEL_CONTROL_ACTIVATE:
+        {
             dji::VehicleSetpoint setpoint;
             if (_cmd_setpoint.read(setpoint) != RTT::NewData)
                 return;
 
             velCommand(mOffboard, setpoint);
             break;
+        }
         case dji::CommandAction::MISSION_ACTIVATE:
         {
             dji::Mission mission_parameters;
@@ -281,6 +283,7 @@ bool MavDroneControlTask::posCommand(
     Solution gps_setpoint = mUtmConverter.convertNWUToGPS(setpoint_rbs);
 
     Offboard::PositionGlobalYaw pos_cmd;
+    pos_cmd.altitude_type = Offboard::PositionGlobalYaw::AltitudeType::Amsl;
     pos_cmd.lat_deg = gps_setpoint.latitude;
     pos_cmd.lon_deg = gps_setpoint.longitude;
     pos_cmd.alt_m = gps_setpoint.altitude;
