@@ -1,10 +1,10 @@
 <package>
   <description brief="Orogen component for drone control using MAVSDK">
-  
+
   </description>
   <author>Jhonas Prado Moura/jhonas.moura@tidewise.io</author>
   <license>Proprietary</license>
-  
+
   <depend package="base/cmake" />
   <depend package="base/types"/>
   <depend package="base/logging"/>
@@ -12,5 +12,5 @@
   <depend package="drivers/gps_base"/>
   <depend package="drivers/orogen/gps_base"/>
   <depend package="drivers/orogen/power_base"/>
-  <depend package="drivers/orogen/drone_dji_sdk"/>
+  <depend package="control/drone_control" />
 </package>

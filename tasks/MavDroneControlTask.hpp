@@ -4,7 +4,6 @@
 #define DRONE_MAVSDK_CONTROL_MAVDRONECONTROL_TASK_HPP
 
 #include "base-logging/Logging.hpp"
-#include "drone_dji_sdk/drone_dji_sdkTypes.hpp"
 #include "drone_mavsdk_control/MavDroneControlTaskBase.hpp"
 #include "drone_mavsdk_controlTypes.hpp"
 #include "mavsdk/mavsdk.h"
@@ -13,6 +12,8 @@
 #include "mavsdk/plugins/telemetry/telemetry.h"
 #include "gps_base/BaseTypes.hpp"
 #include "gps_base/UTMConverter.hpp"
+#include "drone_control/Command.hpp"
+#include "drone_control/MissionCommand.hpp"
 
 namespace drone_mavsdk_control
 {
@@ -137,7 +138,7 @@ argument.
         std::unique_ptr<mavsdk::Mission> mMission;
         gps_base::UTMConverter mUtmConverter;
         double mMaxDistanceFromSetpoint;
-        drone_dji_sdk::Mission mLastMission;
+        drone_control::Mission mLastMission;
 
         HealthStatus healthCheck(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
 
@@ -149,21 +150,21 @@ argument.
 
         void takeoffCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
                             std::unique_ptr<mavsdk::Action> const& action,
-                            drone_dji_sdk::VehicleSetpoint const& setpoint);
+                            drone_control::VehicleSetpoint const& setpoint);
 
         bool goToCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
                          std::unique_ptr<mavsdk::Action> const& action,
-                         drone_dji_sdk::VehicleSetpoint const& setpoint);
+                         drone_control::VehicleSetpoint const& setpoint);
 
         void landingCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
                             std::unique_ptr<mavsdk::Action> const& action,
-                            drone_dji_sdk::VehicleSetpoint const& setpoint);
+                            drone_control::VehicleSetpoint const& setpoint);
 
         void missionCommand(std::unique_ptr<mavsdk::Mission> const& mav_mission,
-                            drone_dji_sdk::Mission const& mission);
+                            drone_control::Mission const& mission);
 
         mavsdk::Mission::MissionPlan
-        convert2MavMissionPlan(drone_dji_sdk::Mission const& mission);
+        convert2MavMissionPlan(drone_control::Mission const& mission);
 
         power_base::BatteryStatus
         batteryFeedback(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
