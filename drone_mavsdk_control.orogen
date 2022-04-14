@@ -1,11 +1,13 @@
 name "drone_mavsdk_control"
 
+using_library "drone_control"
 import_types_from "std"
 import_types_from "drone_mavsdk_controlTypes.hpp"
-import_types_from "drone_dji_sdk"
 import_types_from "gps_base"
 import_types_from "power_base"
 import_types_from "base"
+import_types_from "drone_control/Command.hpp"
+import_types_from "drone_control/MissionCommand.hpp"
 
 # Declare a new task context (i.e., a component)
 #
@@ -33,11 +35,11 @@ task_context "MavDroneControlTask" do
     property "utm_parameters", "gps_base/UTMConversionParameters"
 
     # Command sent to the drone
-    input_port "cmd_action", "drone_dji_sdk/CommandAction"
+    input_port "cmd_action", "drone_control/CommandAction"
 
-    input_port "cmd_setpoint", "drone_dji_sdk/VehicleSetpoint"
+    input_port "cmd_setpoint", "drone_control/VehicleSetpoint"
 
-    input_port "cmd_mission", "drone_dji_sdk/Mission"
+    input_port "cmd_mission", "drone_control/Mission"
 
     output_port "pose_samples", "base/samples/RigidBodyState"
     output_port "battery", "power_base/BatteryStatus"
