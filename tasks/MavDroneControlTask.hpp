@@ -4,16 +4,17 @@
 #define DRONE_MAVSDK_CONTROL_MAVDRONECONTROL_TASK_HPP
 
 #include "base-logging/Logging.hpp"
+#include "drone_control/Command.hpp"
+#include "drone_control/MissionCommand.hpp"
 #include "drone_mavsdk_control/MavDroneControlTaskBase.hpp"
 #include "drone_mavsdk_controlTypes.hpp"
+#include "gps_base/BaseTypes.hpp"
+#include "gps_base/UTMConverter.hpp"
 #include "mavsdk/mavsdk.h"
 #include "mavsdk/plugins/action/action.h"
 #include "mavsdk/plugins/mission/mission.h"
+#include "mavsdk/plugins/offboard/offboard.h"
 #include "mavsdk/plugins/telemetry/telemetry.h"
-#include "gps_base/BaseTypes.hpp"
-#include "gps_base/UTMConverter.hpp"
-#include "drone_control/Command.hpp"
-#include "drone_control/MissionCommand.hpp"
 
 namespace drone_mavsdk_control
 {
@@ -116,8 +117,6 @@ argument.
         void cleanupHook();
 
       private:
-        typedef MavDroneControlTask::States TaskState;
-
         enum UnitHealth
         {
             NOT_ARMABLE = 0x01,
@@ -131,37 +130,59 @@ argument.
         /** @meta bitfield /drone_mavsdk_control/UnitHealth*/
         HealthStatus mUnitHealth;
 
-        std::unique_ptr<mavsdk::Mavsdk> mMavHandler;
         std::shared_ptr<mavsdk::System> mSystem;
+        std::unique_ptr<mavsdk::Mavsdk> mMavHandler;
         std::unique_ptr<mavsdk::Action> mAction;
         std::unique_ptr<mavsdk::Telemetry> mTelemetry;
         std::unique_ptr<mavsdk::Mission> mMission;
+        std::unique_ptr<mavsdk::Offboard> mOffboard;
+        mavsdk::Offboard::Result mControllerStarted;
         gps_base::UTMConverter mUtmConverter;
         double mMaxDistanceFromSetpoint;
         drone_control::Mission mLastMission;
 
         HealthStatus healthCheck(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
 
-        void reportCommand(DroneCommand const& command,
-                           mavsdk::Action::Result const& result);
+        void
+        reportCommand(DroneCommand const& command, mavsdk::Action::Result const& result);
 
-        void reportCommand(DroneCommand const& command,
-                           mavsdk::Mission::Result const& result);
+        void
+        reportCommand(DroneCommand const& command, mavsdk::Mission::Result const& result);
 
-        void takeoffCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                            std::unique_ptr<mavsdk::Action> const& action,
-                            drone_control::VehicleSetpoint const& setpoint);
+        void reportCommand(
+            DroneCommand const& command,
+            mavsdk::Offboard::Result const& result);
 
-        bool goToCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                         std::unique_ptr<mavsdk::Action> const& action,
-                         drone_control::VehicleSetpoint const& setpoint);
+        void takeoffCommand(
+            std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+            std::unique_ptr<mavsdk::Action> const& action,
+            std::unique_ptr<mavsdk::Offboard> const& offboard,
+            drone_control::VehicleSetpoint const& setpoint);
 
-        void landingCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                            std::unique_ptr<mavsdk::Action> const& action,
-                            drone_control::VehicleSetpoint const& setpoint);
+        void landingCommand(
+            std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+            std::unique_ptr<mavsdk::Action> const& action,
+            std::unique_ptr<mavsdk::Offboard> const& offboard,
+            drone_control::VehicleSetpoint const& setpoint);
 
-        void missionCommand(std::unique_ptr<mavsdk::Mission> const& mav_mission,
-                            drone_control::Mission const& mission);
+        bool posCommand(
+            std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+            std::unique_ptr<mavsdk::Offboard> const& offboard,
+            drone_control::VehicleSetpoint const& setpoint);
+
+        bool velCommand(
+            std::unique_ptr<mavsdk::Offboard> const& offboard,
+            drone_control::VehicleSetpoint const& setpoint);
+
+        void missionCommand(
+            std::unique_ptr<mavsdk::Mission> const& mav_mission,
+            drone_control::Mission const& mission);
+
+        void applyTransition(MavDroneControlTask::States const& next_state);
+
+        bool canTakeControl(mavsdk::Telemetry::FlightMode flight_status);
+
+        States flightStatus(mavsdk::Telemetry::FlightMode flight_status);
 
         mavsdk::Mission::MissionPlan
         convert2MavMissionPlan(drone_control::Mission const& mission);
