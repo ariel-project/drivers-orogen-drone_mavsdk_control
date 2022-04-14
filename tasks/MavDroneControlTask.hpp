@@ -4,16 +4,17 @@
 #define DRONE_MAVSDK_CONTROL_MAVDRONECONTROL_TASK_HPP
 
 #include "base-logging/Logging.hpp"
-#include "drone_dji_sdk/drone_dji_sdkTypes.hpp"
+#include "drone_control/Command.hpp"
+#include "drone_control/MissionCommand.hpp"
 #include "drone_mavsdk_control/MavDroneControlTaskBase.hpp"
 #include "drone_mavsdk_controlTypes.hpp"
-#include "mavsdk/mavsdk.h"
-#include "mavsdk/plugins/action/action.h"
-#include "mavsdk/plugins/offboard/offboard.h"
-#include "mavsdk/plugins/mission/mission.h"
-#include "mavsdk/plugins/telemetry/telemetry.h"
 #include "gps_base/BaseTypes.hpp"
 #include "gps_base/UTMConverter.hpp"
+#include "mavsdk/mavsdk.h"
+#include "mavsdk/plugins/action/action.h"
+#include "mavsdk/plugins/mission/mission.h"
+#include "mavsdk/plugins/offboard/offboard.h"
+#include "mavsdk/plugins/telemetry/telemetry.h"
 
 namespace drone_mavsdk_control
 {
@@ -116,7 +117,6 @@ argument.
         void cleanupHook();
 
       private:
-
         enum UnitHealth
         {
             NOT_ARMABLE = 0x01,
@@ -139,38 +139,44 @@ argument.
         mavsdk::Offboard::Result mControllerStarted;
         gps_base::UTMConverter mUtmConverter;
         double mMaxDistanceFromSetpoint;
-        drone_dji_sdk::Mission mLastMission;
+        drone_control::Mission mLastMission;
 
         HealthStatus healthCheck(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
 
-        void reportCommand(DroneCommand const& command,
-                           mavsdk::Action::Result const& result);
+        void
+        reportCommand(DroneCommand const& command, mavsdk::Action::Result const& result);
 
-        void reportCommand(DroneCommand const& command,
-                           mavsdk::Mission::Result const& result);
+        void
+        reportCommand(DroneCommand const& command, mavsdk::Mission::Result const& result);
 
-        void reportCommand(DroneCommand const& command,
-                           mavsdk::Offboard::Result const& result);
+        void reportCommand(
+            DroneCommand const& command,
+            mavsdk::Offboard::Result const& result);
 
-        void takeoffCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                            std::unique_ptr<mavsdk::Action> const& action,
-                            std::unique_ptr<mavsdk::Offboard> const& offboard,
-                            drone_dji_sdk::VehicleSetpoint const& setpoint);
+        void takeoffCommand(
+            std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+            std::unique_ptr<mavsdk::Action> const& action,
+            std::unique_ptr<mavsdk::Offboard> const& offboard,
+            drone_control::VehicleSetpoint const& setpoint);
 
-        bool posCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                        std::unique_ptr<mavsdk::Offboard> const& offboard,
-                        drone_dji_sdk::VehicleSetpoint const& setpoint);
+        void landingCommand(
+            std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+            std::unique_ptr<mavsdk::Action> const& action,
+            std::unique_ptr<mavsdk::Offboard> const& offboard,
+            drone_control::VehicleSetpoint const& setpoint);
 
-        bool velCommand(std::unique_ptr<mavsdk::Offboard> const& offboard,
-                        drone_dji_sdk::VehicleSetpoint const& setpoint);
+        bool posCommand(
+            std::unique_ptr<mavsdk::Telemetry> const& telemetry,
+            std::unique_ptr<mavsdk::Offboard> const& offboard,
+            drone_control::VehicleSetpoint const& setpoint);
 
-        void landingCommand(std::unique_ptr<mavsdk::Telemetry> const& telemetry,
-                            std::unique_ptr<mavsdk::Action> const& action,
-                            std::unique_ptr<mavsdk::Offboard> const& offboard,
-                            drone_dji_sdk::VehicleSetpoint const& setpoint);
+        bool velCommand(
+            std::unique_ptr<mavsdk::Offboard> const& offboard,
+            drone_control::VehicleSetpoint const& setpoint);
 
-        void missionCommand(std::unique_ptr<mavsdk::Mission> const& mav_mission,
-                            drone_dji_sdk::Mission const& mission);
+        void missionCommand(
+            std::unique_ptr<mavsdk::Mission> const& mav_mission,
+            drone_control::Mission const& mission);
 
         void applyTransition(MavDroneControlTask::States const& next_state);
 
@@ -179,7 +185,7 @@ argument.
         States flightStatus(mavsdk::Telemetry::FlightMode flight_status);
 
         mavsdk::Mission::MissionPlan
-        convert2MavMissionPlan(drone_dji_sdk::Mission const& mission);
+        convert2MavMissionPlan(drone_control::Mission const& mission);
 
         power_base::BatteryStatus
         batteryFeedback(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
