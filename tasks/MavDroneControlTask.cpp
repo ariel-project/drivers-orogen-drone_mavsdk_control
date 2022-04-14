@@ -157,7 +157,6 @@ bool MavDroneControlTask::configureHook()
         mAction->set_takeoff_altitude(_takeoff_altitude.get()));
 
     mUtmConverter.setParameters(_utm_parameters.get());
-    mMaxDistanceFromSetpoint = _max_distance_from_setpoint.get();
     return true;
 }
 
@@ -178,9 +177,18 @@ void MavDroneControlTask::applyTransition(
 {
     if (next_state != CONTROLLING)
     {
+        state(next_state);
         return;
     }
-    state(CONTROL_LOST);
+
+    if (!canTakeControl(mTelemetry->flight_mode()))
+    {
+        mAction->hold();
+        sleep(1);
+        state(CONTROLLING);
+        return;
+    }
+    state(next_state);
 }
 
 void MavDroneControlTask::updateHook()
@@ -193,8 +201,10 @@ void MavDroneControlTask::updateHook()
     if (state() != status)
     {
         applyTransition(status);
-        state(status);
     }
+
+    if (state() == CONTROL_LOST)
+        return;
 
     dji::CommandAction cmd;
     if (_cmd_action.read(cmd) == RTT::NoData)
@@ -307,16 +317,6 @@ bool MavDroneControlTask::posCommand(
     unique_ptr<Offboard> const& offboard,
     dji::VehicleSetpoint const& setpoint)
 {
-    Telemetry::Position mav_position = telemetry->position();
-    Solution gps_position;
-    gps_position.latitude = mav_position.latitude_deg;
-    gps_position.longitude = mav_position.longitude_deg;
-    gps_position.altitude = mav_position.absolute_altitude_m;
-    Vector3d position = mUtmConverter.convertToNWU(gps_position).position;
-
-    if ((position - setpoint.position).norm() < mMaxDistanceFromSetpoint)
-        return true;
-
     Vector3d setpoint_absolute_altitude = setpoint.position;
     setpoint_absolute_altitude[2] += telemetry->home().absolute_altitude_m;
 
@@ -573,5 +573,8 @@ MavDroneControlTask::poseFeedback(unique_ptr<Telemetry> const& telemetry)
 
 bool MavDroneControlTask::canTakeControl(mavsdk::Telemetry::FlightMode flight_status)
 {
-    return (flight_status != Telemetry::FlightMode::Posctl);
+    return !(flight_status == Telemetry::FlightMode::Posctl ||
+            flight_status == Telemetry::FlightMode::Altctl ||
+            flight_status == Telemetry::FlightMode::Acro ||
+            flight_status == Telemetry::FlightMode::Manual);
 }

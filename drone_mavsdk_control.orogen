@@ -26,9 +26,6 @@ task_context "MavDroneControlTask" do
     # for the drone being used.
     property "takeoff_altitude", "double"
 
-    # Max distance from the setpoint for go to commands
-    property "max_distance_from_setpoint", "double"
-
     # UTM conversion parameters
     property "utm_parameters", "gps_base/UTMConversionParameters"
 
