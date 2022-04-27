@@ -195,6 +195,7 @@ void MavDroneControlTask::updateHook()
     _unit_health.write(healthCheck(mTelemetry));
     _pose_samples.write(poseFeedback(mTelemetry));
     _battery.write(batteryFeedback(mTelemetry));
+    _flight_status.write(flightStatusFeedback(mTelemetry));
 
     States status = flightStatus(mTelemetry->flight_mode());
     if (state() != status)
@@ -569,6 +570,22 @@ MavDroneControlTask::poseFeedback(unique_ptr<Telemetry> const& telemetry)
 
     pose.time = base::Time::now();
     return pose;
+}
+
+FlightStatus
+MavDroneControlTask::flightStatusFeedback(unique_ptr<Telemetry> const& telemetry)
+{
+    switch (telemetry->landed_state())
+    {
+        case Telemetry::LandedState::OnGround:
+            return FlightStatus::OnGround;
+        case Telemetry::LandedState::TakingOff:
+        case Telemetry::LandedState::Landing:
+        case Telemetry::LandedState::InAir:
+            return FlightStatus::Flying;
+        default:
+            return FlightStatus::Stopped;
+    }
 }
 
 bool MavDroneControlTask::canTakeControl(mavsdk::Telemetry::FlightMode flight_status)
