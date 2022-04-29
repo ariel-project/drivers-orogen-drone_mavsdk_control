@@ -42,6 +42,7 @@ task_context "MavDroneControlTask" do
     output_port "battery", "power_base/BatteryStatus"
     output_port "command_feedback", "drone_mavsdk_control/CommandFeedback"
     output_port "unit_health", "drone_mavsdk_control/HealthStatus"
+    output_port "flight_status", "drone_control/FlightStatus"
 
     runtime_states :TELEMETRY, :CONTROLLING, :CONTROL_LOST
 

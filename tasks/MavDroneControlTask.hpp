@@ -187,6 +187,9 @@ argument.
         mavsdk::Mission::MissionPlan
         convert2MavMissionPlan(drone_control::Mission const& mission);
 
+        drone_control::FlightStatus
+        flightStatusFeedback(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
+
         power_base::BatteryStatus
         batteryFeedback(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
 
