@@ -160,6 +160,11 @@ argument.
             std::unique_ptr<mavsdk::Offboard> const& offboard,
             drone_control::VehicleSetpoint const& setpoint);
 
+        void reactiveTakeoffVelocityCommand(
+            std::unique_ptr<mavsdk::Action> const& action,
+            std::unique_ptr<mavsdk::Offboard> const& offboard,
+            drone_control::VehicleSetpoint const& setpoint);
+
         void landingCommand(
             std::unique_ptr<mavsdk::Telemetry> const& telemetry,
             std::unique_ptr<mavsdk::Action> const& action,

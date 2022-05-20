@@ -224,6 +224,16 @@ void MavDroneControlTask::updateHook()
             takeoffCommand(mTelemetry, mAction, mOffboard, setpoint);
             break;
         }
+        case CommandAction::REACTIVE_TAKEOFF_VELOCITY_ACTIVATE:
+        {
+            // setpoint input
+            VehicleSetpoint setpoint;
+            if (_cmd_setpoint.read(setpoint) != RTT::NewData)
+                return;
+
+            reactiveTakeoffVelocityCommand(mAction, mOffboard, setpoint);
+            break;
+        }
         case CommandAction::LANDING_ACTIVATE:
         {
             VehicleSetpoint setpoint;
@@ -292,6 +302,26 @@ HealthStatus MavDroneControlTask::healthCheck(unique_ptr<Telemetry> const& telem
 
     mUnitHealth.time = base::Time::now();
     return mUnitHealth;
+}
+
+void MavDroneControlTask::reactiveTakeoffVelocityCommand(
+    unique_ptr<Action> const& action,
+    unique_ptr<Offboard> const& offboard,
+    VehicleSetpoint const& setpoint)
+{
+    // Issue take off with a setpoint so the drone moves there
+    // ASAP to avoid colision with the vessel.
+    if (mTelemetry->landed_state() == Telemetry::LandedState::OnGround)
+    {
+        auto drone_arm_result = action->arm();
+        reportCommand(DroneCommand::Arm, drone_arm_result);
+        if (drone_arm_result == Action::Result::Success)
+        {
+            reportCommand(DroneCommand::Takeoff, action->takeoff());
+        }
+    }
+    else if (mTelemetry->landed_state() == Telemetry::LandedState::InAir)
+        velCommand(offboard, setpoint);
 }
 
 void MavDroneControlTask::takeoffCommand(
