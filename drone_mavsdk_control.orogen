@@ -31,6 +31,13 @@ task_context "MavDroneControlTask" do
     # UTM conversion parameters
     property "utm_parameters", "gps_base/UTMConversionParameters"
 
+    # Yaw to yaw speed proportional
+    #
+    # The mavsdk offboard plugin does not provide a way to control all velocities in the
+    # NED frame. The component emulates it by creating a constant differential in yaw,
+    # that is yaw = currentYaw + K_yaw_speed2yaw * yawSpeed
+    property "K_yaw_speed2yaw", "double", 0.1
+
     # Command sent to the drone
     input_port "cmd_action", "drone_control/CommandAction"
 
