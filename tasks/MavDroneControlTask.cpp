@@ -167,6 +167,7 @@ bool MavDroneControlTask::startHook()
 
     mControllerStarted = Offboard::Result::Unknown;
     mLastMission = drone_control::Mission();
+    mCurrentYaw = base::unknown<double>();
     state(TELEMETRY);
 
     return true;
@@ -193,7 +194,9 @@ void MavDroneControlTask::applyTransition(MavDroneControlTask::States const& nex
 void MavDroneControlTask::updateHook()
 {
     _unit_health.write(healthCheck(mTelemetry));
-    _pose_samples.write(poseFeedback(mTelemetry));
+    auto pose = poseFeedback(mTelemetry);
+    mCurrentYaw = pose.getYaw();
+    _pose_samples.write(pose);
     _battery.write(batteryFeedback(mTelemetry));
     _flight_status.write(flightStatusFeedback(mTelemetry));
 
@@ -354,7 +357,7 @@ bool MavDroneControlTask::velCommand(
     vel_cmd.north_m_s = setpoint.velocity[0];
     vel_cmd.east_m_s = -setpoint.velocity[1];
     vel_cmd.down_m_s = -setpoint.velocity[2];
-    vel_cmd.yaw_deg = -setpoint.yaw_rate;
+    vel_cmd.yaw_deg = - (mCurrentYaw + _K_yaw_speed2yaw.get() * setpoint.yaw_rate) * 180 / M_PI;
     reportCommand(DroneCommand::VelControl, offboard->set_velocity_ned(vel_cmd));
 
     if (mOffboard->start() != Offboard::Result::Success)

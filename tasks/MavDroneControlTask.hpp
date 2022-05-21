@@ -139,6 +139,7 @@ argument.
         mavsdk::Offboard::Result mControllerStarted;
         gps_base::UTMConverter mUtmConverter;
         double mMaxDistanceFromSetpoint;
+        double mCurrentYaw;
         drone_control::Mission mLastMission;
 
         HealthStatus healthCheck(std::unique_ptr<mavsdk::Telemetry> const& telemetry);
